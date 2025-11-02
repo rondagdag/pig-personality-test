@@ -120,8 +120,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ id: st
           📖 About This Analysis
         </h3>
         <p className="text-gray-700 dark:text-gray-300 text-sm">
-          The "Draw the Pig" personality test is a projective psychological assessment based on how you 
-          draw a pig. Our AI analyzes your drawing's placement, orientation, detail level, and specific 
+          The &quot;Draw the Pig&quot; personality test is a projective psychological assessment based on how you 
+          draw a pig. Our AI analyzes your drawing&apos;s placement, orientation, detail level, and specific 
           features to provide insights. Remember, this is for entertainment and self-reflection—not a 
           clinical diagnosis. Results are based on established psychological interpretations of the test.
         </p>

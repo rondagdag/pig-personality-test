@@ -344,8 +344,8 @@ export default function GroupPage() {
         </h3>
         <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300">
           <li>Have everyone in your group draw a pig (5 minutes each)</li>
-          <li>Upload each person's drawing with their name</li>
-          <li>Once all drawings are uploaded, click "View Results"</li>
+          <li>Upload each person&apos;s drawing with their name</li>
+          <li>Once all drawings are uploaded, click &quot;View Results&quot;</li>
           <li>Compare placements, orientations, and traits</li>
           <li>Use discussion prompts to explore personality differences</li>
         </ol>

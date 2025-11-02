@@ -65,7 +65,7 @@ export default function DrawPage() {
           🎨 Draw Your Pig
         </h1>
         <p className="text-base sm:text-lg text-gray-700 dark:text-gray-300">
-          Take 5 minutes to draw a pig on paper. When the timer ends, you'll upload a photo.
+          Take 5 minutes to draw a pig on paper. When the timer ends, you&apos;ll upload a photo.
         </p>
       </div>
 
@@ -87,7 +87,7 @@ export default function DrawPage() {
           {/* Status Messages */}
           {!isRunning && !isComplete && (
             <p className="text-gray-600 dark:text-gray-400">
-              Click "Start Drawing" when you're ready to begin!
+              Click &quot;Start Drawing&quot; when you&apos;re ready to begin!
             </p>
           )}
           {isRunning && (
@@ -97,7 +97,7 @@ export default function DrawPage() {
           )}
           {isComplete && (
             <p className="text-green-600 dark:text-green-400 font-bold text-xl">
-              ✅ Time's up! Great job!
+              ✅ Time&apos;s up! Great job!
             </p>
           )}
         </div>
@@ -156,7 +156,7 @@ export default function DrawPage() {
           💡 Drawing Tips
         </h2>
         <ul className="space-y-2 text-gray-700 dark:text-gray-300">
-          <li>• Draw whatever comes to mind—there's no right or wrong way!</li>
+          <li>• Draw whatever comes to mind—there&apos;s no right or wrong way!</li>
           <li>• Use any drawing materials you have (pencil, pen, crayons, etc.)</li>
           <li>• Include as many or as few details as you like</li>
           <li>• Draw on any paper size (standard, notebook, sketch pad)</li>

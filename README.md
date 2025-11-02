@@ -49,11 +49,13 @@ The app analyzes your pig drawing based on:
 ### Local Development
 
 1. **Clone the repository**
+
    ```bash
    cd pig-personality-test
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    # or
@@ -61,6 +63,7 @@ The app analyzes your pig drawing based on:
    ```
 
 3. **Set up environment variables**
+
    ```bash
    cp .env.example .env.local
    ```
@@ -72,6 +75,7 @@ The app analyzes your pig drawing based on:
    - `CONTENT_UNDERSTANDING_KEY`: AI Foundry subscription key
 
 4. **Run development server**
+
    ```bash
    npm run dev
    ```
@@ -79,6 +83,7 @@ The app analyzes your pig drawing based on:
    Open [http://localhost:3000](http://localhost:3000)
 
 5. **Run tests**
+
    ```bash
    npm test
    ```
@@ -88,31 +93,37 @@ The app analyzes your pig drawing based on:
 ### Using Terraform
 
 1. **Navigate to infrastructure directory**
+
    ```bash
    cd iac
    ```
 
 2. **Initialize Terraform**
+
    ```bash
    terraform init
    ```
 
 3. **Review the plan**
+
    ```bash
    terraform plan -out=main.tfplan
    ```
 
 4. **Apply infrastructure**
+
    ```bash
    terraform apply main.tfplan
    ```
 
 5. **Get outputs**
+
    ```bash
    terraform output
    ```
 
 This provisions:
+
 - ✅ Resource Group
 - ✅ Storage Account (with containers: `pig-images`, `pig-results`)
 - ✅ Key Vault (stores secrets)
@@ -152,11 +163,13 @@ az webapp deployment source config-zip \
 ### Option 2: GitHub Actions CI/CD
 
 The repo includes a GitHub Actions workflow (`.github/workflows/azure-deploy.yml`) that:
+
 1. Builds the Next.js app
 2. Runs tests
 3. Deploys to Azure App Service using OIDC authentication
 
 Set up the following GitHub secrets:
+
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
@@ -178,6 +191,7 @@ npm test -- --coverage
 ```
 
 Test coverage includes:
+
 - ✅ Placement analysis (top/middle/bottom)
 - ✅ Detail level detection (many/few)
 - ✅ Leg count variations (0, 2, 3, 4 legs)
@@ -188,7 +202,7 @@ Test coverage includes:
 
 ## 📁 Project Structure
 
-```
+```text
 pig-personality-test/
 ├── app/                      # Next.js App Router
 │   ├── layout.tsx           # Root layout with navigation
@@ -234,6 +248,7 @@ pig-personality-test/
 Analyzes a pig drawing and returns personality insights.
 
 **Request:**
+
 ```json
 {
   "imageBase64": "data:image/jpeg;base64,...",
@@ -242,6 +257,7 @@ Analyzes a pig drawing and returns personality insights.
 ```
 
 **Response:**
+
 ```json
 {
   "id": "uuid-string",

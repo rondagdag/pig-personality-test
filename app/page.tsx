@@ -35,7 +35,7 @@ export default function Home() {
               <div className="text-3xl sm:text-4xl mb-2 sm:mb-3">✏️</div>
               <h3 className="font-semibold text-base sm:text-lg mb-2">1. Draw</h3>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                Take 5 minutes to draw a pig on paper. Don't overthink it—just draw!
+                Take 5 minutes to draw a pig on paper. Don&apos;t overthink it—just draw!
               </p>
             </div>
             <div>
@@ -106,7 +106,7 @@ export default function Home() {
         <div className="mt-8 text-sm text-gray-600 dark:text-gray-400">
           <p>
             🔒 <strong>Privacy First:</strong> Your drawings are processed securely and automatically 
-            deleted after 24 hours. We don't store any personal information.
+            deleted after 24 hours. We don&apos;t store any personal information.
           </p>
         </div>
       </div>

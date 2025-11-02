@@ -43,6 +43,8 @@ iac/terraform.tfstate
 iac/terraform.tfstate.backup
 iac/*.tfplan
 iac/*.tfstate
+iac/*.tfvars
+iac/*.tfvars.json
 iac/crash.log
 iac/crash.*.log
 iac/override.tf

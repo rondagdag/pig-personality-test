@@ -168,6 +168,237 @@ iac/
 4. Test connection with `testConnection()` helper function
 5. Remember: Submit returns request-id, poll with analyzerResults endpoint
 
+### Working with Infrastructure as Code (IaC)
+
+#### Terraform Structure
+All infrastructure code lives in `iac/` directory:
+- **main.tf**: Core resources (RG, Storage, Key Vault, AI Services, App Service)
+- **variables.tf**: Input variables with validation rules
+- **outputs.tf**: Exported values for app configuration
+- **terraform.tfstate**: State file (committed to repo, consider remote backend for production)
+
+#### Resource Architecture
+```
+Resource Group (rg-draw-the-pig)
+├── Storage Account (pigtest{suffix})
+│   ├── Container: pig-images (public blob access)
+│   └── Container: pig-results (private)
+├── Key Vault (pigtest-kv-{suffix})
+│   ├── Secret: storage-account-key
+│   ├── Secret: content-understanding-key
+│   └── Secret: content-understanding-endpoint
+├── Cognitive Account (pigtest-ai-{suffix})
+│   ├── kind: AIServices (NOT CognitiveServices)
+│   └── custom_subdomain_name: Required for Content Understanding
+├── Service Plan (pigtest-plan-{suffix})
+│   └── SKU: B1 (Basic Linux)
+└── Linux Web App (pigtest-app-{suffix})
+    ├── Node.js 20 LTS runtime
+    ├── System-assigned managed identity
+    └── Key Vault references in app settings
+```
+
+#### Variables Reference
+- **project_name**: Resource prefix (3-10 chars, lowercase alphanumeric, default: `pigtest`)
+- **resource_group_name**: RG name (default: `rg-draw-the-pig`)
+- **location**: Azure region (must be `westus`, `swedencentral`, or `australiaeast` for Content Understanding)
+- **app_service_sku**: App Service tier (B1/B2/S1/S2/P1V2/P2V2, default: `B1`)
+- **tags**: Resource tags (Project, Environment, ManagedBy)
+
+#### Common IaC Operations
+
+**Initial Setup**:
+```bash
+cd iac
+terraform init  # Downloads azurerm ~> 4.0 and random ~> 3.0 providers
+```
+
+**Plan Changes** (always run first):
+```bash
+terraform plan -out=main.tfplan  # Saves plan to file
+terraform show main.tfplan       # Review saved plan
+```
+
+**Apply Infrastructure**:
+```bash
+terraform apply main.tfplan      # Apply saved plan
+terraform apply -auto-approve    # Apply without confirmation (CI/CD only)
+```
+
+**Override Variables**:
+```bash
+terraform plan -var="location=swedencentral" -var="app_service_sku=B2"
+terraform plan -var-file="prod.tfvars"  # Use variable file
+```
+
+**View Outputs**:
+```bash
+terraform output                              # All outputs
+terraform output -json                        # JSON format
+terraform output app_service_url              # Specific output
+terraform output -raw ai_foundry_key          # Sensitive values
+```
+
+**Retrieve Secrets for Local Development**:
+```bash
+# Get Key Vault name from Terraform output
+KV_NAME=$(terraform output -raw key_vault_name)
+
+# Retrieve secrets
+az keyvault secret show --vault-name $KV_NAME --name content-understanding-key --query value -o tsv
+az keyvault secret show --vault-name $KV_NAME --name storage-account-key --query value -o tsv
+
+# Or use Terraform output (requires terraform refresh)
+terraform output -raw ai_foundry_key
+terraform output -raw storage_account_connection_string
+```
+
+**Destroy Resources** (careful!):
+```bash
+terraform plan -destroy -out=destroy.tfplan  # Review destruction plan
+terraform apply destroy.tfplan               # Execute destruction
+terraform destroy -auto-approve              # Skip confirmation (use with caution)
+```
+
+#### Critical Terraform Provider v4.0 Changes
+The project uses azurerm ~> 4.0, which introduced breaking changes from v3:
+
+1. **Subscription ID Required**: Must explicitly set `subscription_id` in provider block
+   ```hcl
+   provider "azurerm" {
+     subscription_id = "00000000-0000-0000-0000-000000000000"
+   }
+   ```
+
+2. **Storage Container Changes**: `storage_account_name` deprecated, use `storage_account_id`
+   ```hcl
+   # OLD (v3): storage_account_name = azurerm_storage_account.main.name
+   # NEW (v4): Use storage_account_name directly (still supported but id preferred)
+   ```
+
+3. **Key Vault Soft Delete**: Feature flags now nested under `features.key_vault`
+   ```hcl
+   features {
+     key_vault {
+       purge_soft_delete_on_destroy = true
+     }
+   }
+   ```
+
+#### Adding New Resources
+
+**Example: Add Application Insights**:
+```hcl
+resource "azurerm_application_insights" "main" {
+  name                = "${var.project_name}-ai-${random_string.suffix.result}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  application_type    = "web"
+  
+  tags = var.tags
+}
+
+# Add to Key Vault
+resource "azurerm_key_vault_secret" "appinsights_key" {
+  name         = "appinsights-instrumentation-key"
+  value        = azurerm_application_insights.main.instrumentation_key
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# Add to App Service app_settings
+app_settings = {
+  APPINSIGHTS_INSTRUMENTATIONKEY = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.appinsights_key.id})"
+}
+```
+
+#### Post-Deployment Steps
+
+1. **Restart App Service** to load Key Vault references:
+   ```bash
+   RG_NAME=$(terraform output -raw resource_group_name)
+   APP_NAME=$(terraform output -raw app_service_name)
+   az webapp restart --resource-group $RG_NAME --name $APP_NAME
+   ```
+
+2. **Update Local Environment**:
+   ```bash
+   # Copy .env.local.example to .env.local
+   # Populate with Terraform outputs
+   echo "AZURE_STORAGE_ACCOUNT_NAME=$(terraform output -raw storage_account_name)" >> .env.local
+   echo "AZURE_STORAGE_ACCOUNT_KEY=$(terraform output -raw ai_foundry_key)" >> .env.local
+   ```
+
+3. **Verify Deployment**:
+   ```bash
+   # Test App Service endpoint
+   curl https://$(terraform output -raw app_service_default_hostname)
+   
+   # Check app settings loaded correctly
+   az webapp config appsettings list --resource-group $RG_NAME --name $APP_NAME
+   ```
+
+4. **Update Documentation**: Update DEPLOYMENT.md with new resource names/URLs
+
+#### State Management Best Practices
+
+**Current Setup**: State stored locally in `iac/terraform.tfstate` (committed to repo)
+
+**Recommended for Production**: Use remote backend
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "rg-terraform-state"
+    storage_account_name = "tfstate123456"
+    container_name       = "tfstate"
+    key                  = "pig-personality-test.tfstate"
+  }
+}
+```
+
+**State Commands**:
+```bash
+terraform state list                       # List all resources
+terraform state show <resource>            # Show resource details
+terraform state rm <resource>              # Remove from state (doesn't destroy)
+terraform import <resource> <azure-id>     # Import existing resource
+terraform refresh                          # Sync state with remote
+```
+
+#### Troubleshooting IaC Issues
+
+**Problem: Terraform fails with "subscription not found"**
+- Solution: Update `subscription_id` in provider block (v4.0 requirement)
+
+**Problem: Key Vault access denied**
+- Solution: Verify access policy for your user/service principal:
+  ```bash
+  az keyvault set-policy --name <kv-name> --upn <user@domain.com> --secret-permissions get list
+  ```
+
+**Problem: App Service can't access Key Vault secrets**
+- Solution: Ensure managed identity has access policy (applied via `azurerm_key_vault_access_policy`)
+
+**Problem: Storage container already exists error**
+- Solution: Import existing container:
+  ```bash
+  terraform import azurerm_storage_container.images /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{sa}/blobServices/default/containers/pig-images
+  ```
+
+**Problem: AI Services endpoint returns 404**
+- Solution: Verify `kind = "AIServices"` and `custom_subdomain_name` is set (generic CognitiveServices won't work)
+
+**Problem: Terraform state drift**
+- Solution: Run `terraform plan` to see differences, then `terraform apply` to reconcile
+
+#### Security Considerations
+
+- **Secrets Management**: All secrets stored in Key Vault, referenced via `@Microsoft.KeyVault(...)` syntax
+- **Managed Identity**: App Service uses system-assigned identity to access Key Vault (no keys in app settings)
+- **Storage Access**: Public blob access only for `pig-images` container (24h retention), `pig-results` is private
+- **TLS Enforcement**: `min_tls_version = "TLS1_2"` and `https_traffic_only_enabled = true`
+- **Soft Delete**: Key Vault has 7-day retention for accidental deletions
+- **Subscription ID**: Hardcoded in main.tf (consider moving to variable for multi-tenant)
+
 ### Updating Infrastructure
 1. Always run `terraform plan` first to review changes
 2. After applying, restart App Service to pick up new Key Vault secrets:

@@ -23,7 +23,7 @@ provider "azurerm" {
       recover_soft_deleted_key_vaults = true
     }
   }
-  subscription_id = "00000000-0000-0000-0000-000000000000"
+  subscription_id = var.subscription_id
 }
 
 # Current Azure client configuration
@@ -69,13 +69,13 @@ resource "azurerm_storage_account" "main" {
 # Blob containers
 resource "azurerm_storage_container" "images" {
   name                  = "pig-images"
-  storage_account_name  = azurerm_storage_account.main.name
+  storage_account_id    = azurerm_storage_account.main.id
   container_access_type = "blob"
 }
 
 resource "azurerm_storage_container" "results" {
-  name                 = "pig-results"
-  storage_account_name = azurerm_storage_account.main.name
+  name               = "pig-results"
+  storage_account_id = azurerm_storage_account.main.id
   # No public access (container_access_type defaults to private when omitted)
 }
 

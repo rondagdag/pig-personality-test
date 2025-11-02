@@ -46,3 +46,9 @@ variable "app_service_sku" {
     error_message = "App Service SKU must be a valid tier (B1, B2, S1, S2, P1V2, P2V2)."
   }
 }
+
+variable "subscription_id" {
+  description = "Azure subscription ID"
+  type        = string
+  sensitive   = true
+}
