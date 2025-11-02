@@ -50,6 +50,27 @@ output "app_service_url" {
   value       = "https://${azurerm_linux_web_app.main.default_hostname}"
 }
 
+output "ai_foundry_workspace_name" {
+  description = "Name of the AI Foundry workspace (can be used as hub)"
+  value       = azurerm_machine_learning_workspace.ai_foundry.name
+}
+
+output "ai_foundry_workspace_id" {
+  description = "Resource ID of the AI Foundry workspace"
+  value       = azurerm_machine_learning_workspace.ai_foundry.id
+}
+
+output "application_insights_name" {
+  description = "Name of the Application Insights resource"
+  value       = azurerm_application_insights.ai_foundry.name
+}
+
+output "application_insights_instrumentation_key" {
+  description = "Application Insights instrumentation key"
+  value       = azurerm_application_insights.ai_foundry.instrumentation_key
+  sensitive   = true
+}
+
 output "deployment_instructions" {
   description = "Instructions for deploying the application"
   value       = <<-EOT
@@ -74,5 +95,10 @@ output "deployment_instructions" {
     
     5. View secrets in Key Vault:
        az keyvault secret show --vault-name ${azurerm_key_vault.main.name} --name content-understanding-key
+    
+    6. Access AI Foundry workspace:
+       Workspace: ${azurerm_machine_learning_workspace.ai_foundry.name}
+       AI Studio Portal: https://ai.azure.com/
+       Create hubs and projects in the portal using this workspace
   EOT
 }

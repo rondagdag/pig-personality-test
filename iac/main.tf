@@ -141,6 +141,48 @@ resource "azurerm_key_vault_secret" "ai_foundry_endpoint" {
   key_vault_id = azurerm_key_vault.main.id
 }
 
+# Application Insights for AI Foundry
+resource "azurerm_application_insights" "ai_foundry" {
+  name                = "${var.project_name}-appi-${random_string.suffix.result}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  application_type    = "web"
+  
+  tags = var.tags
+}
+
+# Azure Machine Learning Workspace (serves as AI Foundry Hub)
+# Note: AI Foundry Hub/Project distinction is managed in the Azure AI Studio portal
+# This workspace can be used as a hub for AI projects
+# The workspace automatically creates necessary access policies for Key Vault and Storage
+resource "azurerm_machine_learning_workspace" "ai_foundry" {
+  name                          = "${var.project_name}-aiworkspace-${random_string.suffix.result}"
+  location                      = azurerm_resource_group.main.location
+  resource_group_name           = azurerm_resource_group.main.name
+  application_insights_id       = azurerm_application_insights.ai_foundry.id
+  key_vault_id                  = azurerm_key_vault.main.id
+  storage_account_id            = azurerm_storage_account.main.id
+  
+  identity {
+    type = "SystemAssigned"
+  }
+  
+  # Enable public network access for AI Studio
+  public_network_access_enabled = true
+  
+  tags = merge(var.tags, {
+    Purpose = "AI Foundry Hub and Projects"
+  })
+}
+
+# Grant ML Workspace managed identity access to AI Services
+# Note: Key Vault and Storage access are automatically configured by the workspace
+resource "azurerm_role_assignment" "ai_foundry_cognitive" {
+  scope                = azurerm_cognitive_account.ai_foundry.id
+  role_definition_name = "Cognitive Services User"
+  principal_id         = azurerm_machine_learning_workspace.ai_foundry.identity[0].principal_id
+}
+
 # App Service Plan
 resource "azurerm_service_plan" "main" {
   name                = "${var.project_name}-plan-${random_string.suffix.result}"
