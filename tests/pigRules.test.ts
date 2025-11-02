@@ -163,7 +163,7 @@ describe('Pig Rules Engine', () => {
       const traits = analyzePigDrawing(detection);
       const earTrait = traits.find(t => t.category === 'ears');
 
-      expect(earTrait).toBeNull();
+      expect(earTrait).toBeUndefined();
     });
   });
 
@@ -189,7 +189,7 @@ describe('Pig Rules Engine', () => {
       const traits = analyzePigDrawing(detection);
       const tailTrait = traits.find(t => t.category === 'tail');
 
-      expect(tailTrait).toBeNull();
+      expect(tailTrait).toBeUndefined();
     });
   });
 

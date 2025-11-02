@@ -42,6 +42,15 @@ iac/.terraform.lock.hcl
 iac/terraform.tfstate
 iac/terraform.tfstate.backup
 iac/*.tfplan
+iac/*.tfstate
+iac/crash.log
+iac/crash.*.log
+iac/override.tf
+iac/override.tf.json
+iac/*_override.tf
+iac/*_override.tf.json
+iac/.terraformrc
+iac/terraform.rc
 
 # deployment and sensitive documentation
 DEPLOYMENT.md
@@ -54,3 +63,65 @@ KEYS.md
 **/keys.txt
 **/*-credentials.md
 **/*-secrets.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Azure and cloud credentials
+*.publishsettings
+*.azurePubxml
+*.azurePubxml.user
+*.azureSettings
+.azure/
+azure-pipelines-*.yml.user
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+*.temp
+*~
+
+# Test and coverage
+coverage/
+*.coverage
+.nyc_output/
+test-results/
+.jest-cache/
+
+# Package manager locks (keep package-lock.json, ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# Local development
+.local/
+*.local
+local-config.json

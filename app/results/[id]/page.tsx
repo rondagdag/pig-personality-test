@@ -2,8 +2,9 @@ import { notFound } from 'next/navigation';
 import { getResult } from '@/lib/storage/results';
 import Link from 'next/link';
 
-export default async function ResultsPage({ params }: { params: { id: string } }) {
-  const result = await getResult(params.id);
+export default async function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = await getResult(id);
 
   if (!result) {
     notFound();
@@ -128,7 +129,7 @@ export default async function ResultsPage({ params }: { params: { id: string } }
 
       {/* Result ID for reference */}
       <div className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">
-        <p>Result ID: {result.id}</p>
+        <p>Result ID: {id}</p>
       </div>
     </div>
   );

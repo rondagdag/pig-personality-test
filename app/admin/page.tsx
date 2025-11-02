@@ -1,22 +1,29 @@
-import { listAllResults } from '@/lib/storage/results';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { AnalysisResult } from '@/lib/types';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
+export default function AdminPage() {
+  const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-export default async function AdminPage() {
-  let results = [];
-  let error = null;
-
-  try {
-    results = await listAllResults();
-  } catch (err: any) {
-    error = err.message;
-  }
-
-  const handleExportCSV = () => {
-    // This will be handled client-side
-    return null;
-  };
+  useEffect(() => {
+    async function loadResults() {
+      try {
+        const response = await fetch('/api/admin/results');
+        if (!response.ok) throw new Error('Failed to fetch results');
+        const data = await response.json();
+        setResults(data.results || []);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadResults();
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -29,6 +36,12 @@ export default async function AdminPage() {
         </p>
       </div>
 
+      {loading && (
+        <div className="card text-center py-12">
+          <p className="text-gray-600 dark:text-gray-400">Loading results...</p>
+        </div>
+      )}
+
       {error && (
         <div className="card bg-red-50 dark:bg-red-900/20 mb-8">
           <p className="text-red-700 dark:text-red-300">
@@ -36,6 +49,9 @@ export default async function AdminPage() {
           </p>
         </div>
       )}
+
+      {!loading && !error && (
+        <>
 
       {/* Stats */}
       <div className="grid md:grid-cols-3 gap-4 mb-8">
@@ -157,13 +173,14 @@ export default async function AdminPage() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
 
-// Client component for export functionality
-function ExportButton({ results, format }: { results: any[]; format: 'csv' | 'json' }) {
-  'use client';
+// Export button component
+function ExportButton({ results, format }: { results: AnalysisResult[]; format: 'csv' | 'json' }) {
 
   const handleExport = () => {
     if (format === 'json') {
@@ -182,7 +199,7 @@ function ExportButton({ results, format }: { results: any[]; format: 'csv' | 'js
   );
 }
 
-function convertToCSV(results: any[]): string {
+function convertToCSV(results: AnalysisResult[]): string {
   const headers = ['ID', 'Date', 'Summary', 'Trait Count', 'Detection Count', 'Processing Time (ms)'];
   const rows = results.map((r) => [
     r.id,
