@@ -1,31 +1,64 @@
 # Draw the Pig Personality Test - AI Agent Instructions
 
 ## Project Overview
-Next.js 15 (App Router) application that analyzes hand-drawn pig images using Azure AI Content Understanding and maps visual features to personality traits via a deterministic rules engine.
+Next.js 15 (App Router) application that analyzes hand-drawn pig images using **Azure AI Content Understanding** (NOT OpenAI) and maps visual features to personality traits via a **deterministic rules engine** (no ML/randomness).
+
+**Tech Stack**: Next.js 15 App Router • TypeScript • Azure AI Services • Azure Blob Storage • Terraform • Jest
 
 ## Critical Architecture Patterns
 
 ### Azure AI Integration (NOT OpenAI)
-- **Service Type Required**: AIServices (kind: AIServices) with custom domain, NOT generic CognitiveServices
-- **Endpoint Pattern**: `https://{custom-domain}.cognitiveservices.azure.com/contentunderstanding/analyzers/{analyzerId}:analyze`
-- **API Version**: `2025-05-01-preview` (hardcoded in `lib/azure/content-understanding.ts`)
-- **Analyzer ID**: `prebuilt-imageAnalyzer` for object detection
-- **Authentication**: Uses `Ocp-Apim-Subscription-Key` header (not Bearer token)
-- **Request/Response Flow**: Submit → Poll (1s intervals, 60s timeout) → Transform (see `analyzeImage()` in `lib/azure/content-understanding.ts`)
+```typescript
+// CRITICAL: Must use AIServices with custom subdomain, NOT generic CognitiveServices
+// Endpoint: https://{custom-subdomain}.cognitiveservices.azure.com/
+// Auth: Ocp-Apim-Subscription-Key header (NOT Bearer token)
+// API Version: 2025-05-01-preview (hardcoded in lib/azure/content-understanding.ts)
+// Analyzer: prebuilt-imageAnalyzer
+
+// Request/Response Pattern (lib/azure/content-understanding.ts):
+1. submitAnalysisRequest() → returns requestId
+2. pollForResults() → poll every 1s, max 60s timeout
+3. transformToDetection() → convert Azure response to typed Detection model
+```
 
 ### Data Flow Pipeline
-1. **Image Upload** → `app/api/analyze/route.ts` (POST with base64 or blobUrl)
-2. **Azure Blob Storage** → Public container for 24h (pig-images), private for results (pig-results)
-3. **Azure AI Analysis** → `lib/azure/content-understanding.ts` (async polling pattern)
-4. **Detection Transform** → Azure response → `Detection` type (typed bounding boxes)
-5. **Rules Engine** → `lib/scoring/pigRules.ts` (deterministic, no ML)
-6. **Result Persistence** → JSON in private blob container (`lib/storage/results.ts`)
+```
+User Upload (base64/blobUrl)
+  ↓
+app/api/analyze/route.ts (POST handler, runtime='nodejs', maxDuration=60)
+  ↓
+Azure Blob Storage (pig-images: public 24h, pig-results: private)
+  ↓
+lib/azure/content-understanding.ts (async polling pattern)
+  ↓
+Detection type (typed bounding boxes: head, body, legs, ears, tail)
+  ↓
+lib/scoring/pigRules.ts (deterministic rules, NO randomness)
+  ↓
+lib/storage/results.ts (persist JSON to private blob)
+```
 
-### Type System (lib/types.ts)
-- `Detection`: Internal model with head/body/legs/ears/tail bounding boxes + overall canvas
-- `AzureAnalyzerResponse`: Raw Azure API response (status polling with Running/Succeeded/Failed)
-- `PersonalityTrait`: Rule output with category/statement/evidence
-- All bounding boxes use `{ x, y, width, height }` coordinate system (top-left origin)
+### Type System (`lib/types.ts`)
+```typescript
+// Core detection model (internal, NOT Azure's format)
+Detection: {
+  overall: { boundingBox, canvas }
+  head?: DetectionRegion
+  body?: DetectionRegion
+  legs?: DetectionRegion[]
+  ears?: DetectionRegion[]
+  tail?: DetectionRegion
+}
+
+// All bounding boxes: { x, y, width, height } (top-left origin)
+// Azure response → transformToDetection() → Detection type
+
+PersonalityTrait: {
+  category: 'placement' | 'orientation' | 'details' | 'legs' | 'ears' | 'tail'
+  statement: string  // from lib/prompts.ts PERSONALITY_STATEMENTS
+  evidence: { key: string, value: string | number }
+}
+```
 
 ## Key Conventions
 
@@ -168,245 +201,34 @@ iac/
 4. Test connection with `testConnection()` helper function
 5. Remember: Submit returns request-id, poll with analyzerResults endpoint
 
-### Working with Infrastructure as Code (IaC)
+### Infrastructure (Terraform in `iac/`)
+**Critical**: Uses azurerm ~> 4.0 (breaking changes from v3)
 
-#### Terraform Structure
-All infrastructure code lives in `iac/` directory:
-- **main.tf**: Core resources (RG, Storage, Key Vault, AI Services, App Service)
-- **variables.tf**: Input variables with validation rules
-- **outputs.tf**: Exported values for app configuration
-- **terraform.tfstate**: State file (committed to repo, consider remote backend for production)
-
-#### Resource Architecture
-```
-Resource Group (rg-draw-the-pig)
-├── Storage Account (pigtest{suffix})
-│   ├── Container: pig-images (public blob access)
-│   └── Container: pig-results (private)
-├── Key Vault (pigtest-kv-{suffix})
-│   ├── Secret: storage-account-key
-│   ├── Secret: content-understanding-key
-│   └── Secret: content-understanding-endpoint
-├── Cognitive Account (pigtest-ai-{suffix})
-│   ├── kind: AIServices (NOT CognitiveServices)
-│   └── custom_subdomain_name: Required for Content Understanding
-├── Service Plan (pigtest-plan-{suffix})
-│   └── SKU: B1 (Basic Linux)
-└── Linux Web App (pigtest-app-{suffix})
-    ├── Node.js 20 LTS runtime
-    ├── System-assigned managed identity
-    └── Key Vault references in app settings
-```
-
-#### Variables Reference
-- **project_name**: Resource prefix (3-10 chars, lowercase alphanumeric, default: `pigtest`)
-- **resource_group_name**: RG name (default: `rg-draw-the-pig`)
-- **location**: Azure region (must be `westus`, `swedencentral`, or `australiaeast` for Content Understanding)
-- **app_service_sku**: App Service tier (B1/B2/S1/S2/P1V2/P2V2, default: `B1`)
-- **tags**: Resource tags (Project, Environment, ManagedBy)
-
-#### Common IaC Operations
-
-**Initial Setup**:
 ```bash
 cd iac
-terraform init  # Downloads azurerm ~> 4.0 and random ~> 3.0 providers
+terraform init           # One-time setup
+terraform plan -out=main.tfplan
+terraform apply main.tfplan
+
+# Post-deploy: Retrieve secrets from Key Vault
+az keyvault secret show --vault-name <kv-name> --name content-understanding-key --query value -o tsv
 ```
 
-**Plan Changes** (always run first):
-```bash
-terraform plan -out=main.tfplan  # Saves plan to file
-terraform show main.tfplan       # Review saved plan
-```
+**v4.0 Breaking Changes**:
+- Explicit `subscription_id` required in provider block
+- `kind = "AIServices"` with `custom_subdomain_name` for Content Understanding
+- Storage container `storage_account_name` deprecated (use `storage_account_id`)
 
-**Apply Infrastructure**:
-```bash
-terraform apply main.tfplan      # Apply saved plan
-terraform apply -auto-approve    # Apply without confirmation (CI/CD only)
-```
+**Resources Deployed**:
+- Storage Account: pig-images (public 24h), pig-results (private)
+- AI Services: kind=AIServices with custom subdomain (NOT CognitiveServices)
+- Key Vault: All secrets stored here, App Service accesses via managed identity
+- App Service: Linux B1, Node.js 20 LTS
 
-**Override Variables**:
-```bash
-terraform plan -var="location=swedencentral" -var="app_service_sku=B2"
-terraform plan -var-file="prod.tfvars"  # Use variable file
-```
-
-**View Outputs**:
-```bash
-terraform output                              # All outputs
-terraform output -json                        # JSON format
-terraform output app_service_url              # Specific output
-terraform output -raw ai_foundry_key          # Sensitive values
-```
-
-**Retrieve Secrets for Local Development**:
-```bash
-# Get Key Vault name from Terraform output
-KV_NAME=$(terraform output -raw key_vault_name)
-
-# Retrieve secrets
-az keyvault secret show --vault-name $KV_NAME --name content-understanding-key --query value -o tsv
-az keyvault secret show --vault-name $KV_NAME --name storage-account-key --query value -o tsv
-
-# Or use Terraform output (requires terraform refresh)
-terraform output -raw ai_foundry_key
-terraform output -raw storage_account_connection_string
-```
-
-**Destroy Resources** (careful!):
-```bash
-terraform plan -destroy -out=destroy.tfplan  # Review destruction plan
-terraform apply destroy.tfplan               # Execute destruction
-terraform destroy -auto-approve              # Skip confirmation (use with caution)
-```
-
-#### Critical Terraform Provider v4.0 Changes
-The project uses azurerm ~> 4.0, which introduced breaking changes from v3:
-
-1. **Subscription ID Required**: Must explicitly set `subscription_id` in provider block
-   ```hcl
-   provider "azurerm" {
-     subscription_id = "00000000-0000-0000-0000-000000000000"
-   }
-   ```
-
-2. **Storage Container Changes**: `storage_account_name` deprecated, use `storage_account_id`
-   ```hcl
-   # OLD (v3): storage_account_name = azurerm_storage_account.main.name
-   # NEW (v4): Use storage_account_name directly (still supported but id preferred)
-   ```
-
-3. **Key Vault Soft Delete**: Feature flags now nested under `features.key_vault`
-   ```hcl
-   features {
-     key_vault {
-       purge_soft_delete_on_destroy = true
-     }
-   }
-   ```
-
-#### Adding New Resources
-
-**Example: Add Application Insights**:
-```hcl
-resource "azurerm_application_insights" "main" {
-  name                = "${var.project_name}-ai-${random_string.suffix.result}"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  application_type    = "web"
-  
-  tags = var.tags
-}
-
-# Add to Key Vault
-resource "azurerm_key_vault_secret" "appinsights_key" {
-  name         = "appinsights-instrumentation-key"
-  value        = azurerm_application_insights.main.instrumentation_key
-  key_vault_id = azurerm_key_vault.main.id
-}
-
-# Add to App Service app_settings
-app_settings = {
-  APPINSIGHTS_INSTRUMENTATIONKEY = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.appinsights_key.id})"
-}
-```
-
-#### Post-Deployment Steps
-
-1. **Restart App Service** to load Key Vault references:
-   ```bash
-   RG_NAME=$(terraform output -raw resource_group_name)
-   APP_NAME=$(terraform output -raw app_service_name)
-   az webapp restart --resource-group $RG_NAME --name $APP_NAME
-   ```
-
-2. **Update Local Environment**:
-   ```bash
-   # Copy .env.local.example to .env.local
-   # Populate with Terraform outputs
-   echo "AZURE_STORAGE_ACCOUNT_NAME=$(terraform output -raw storage_account_name)" >> .env.local
-   echo "AZURE_STORAGE_ACCOUNT_KEY=$(terraform output -raw ai_foundry_key)" >> .env.local
-   ```
-
-3. **Verify Deployment**:
-   ```bash
-   # Test App Service endpoint
-   curl https://$(terraform output -raw app_service_default_hostname)
-   
-   # Check app settings loaded correctly
-   az webapp config appsettings list --resource-group $RG_NAME --name $APP_NAME
-   ```
-
-4. **Update Documentation**: Update DEPLOYMENT.md with new resource names/URLs
-
-#### State Management Best Practices
-
-**Current Setup**: State stored locally in `iac/terraform.tfstate` (committed to repo)
-
-**Recommended for Production**: Use remote backend
-```hcl
-terraform {
-  backend "azurerm" {
-    resource_group_name  = "rg-terraform-state"
-    storage_account_name = "tfstate123456"
-    container_name       = "tfstate"
-    key                  = "pig-personality-test.tfstate"
-  }
-}
-```
-
-**State Commands**:
-```bash
-terraform state list                       # List all resources
-terraform state show <resource>            # Show resource details
-terraform state rm <resource>              # Remove from state (doesn't destroy)
-terraform import <resource> <azure-id>     # Import existing resource
-terraform refresh                          # Sync state with remote
-```
-
-#### Troubleshooting IaC Issues
-
-**Problem: Terraform fails with "subscription not found"**
-- Solution: Update `subscription_id` in provider block (v4.0 requirement)
-
-**Problem: Key Vault access denied**
-- Solution: Verify access policy for your user/service principal:
-  ```bash
-  az keyvault set-policy --name <kv-name> --upn <user@domain.com> --secret-permissions get list
-  ```
-
-**Problem: App Service can't access Key Vault secrets**
-- Solution: Ensure managed identity has access policy (applied via `azurerm_key_vault_access_policy`)
-
-**Problem: Storage container already exists error**
-- Solution: Import existing container:
-  ```bash
-  terraform import azurerm_storage_container.images /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{sa}/blobServices/default/containers/pig-images
-  ```
-
-**Problem: AI Services endpoint returns 404**
-- Solution: Verify `kind = "AIServices"` and `custom_subdomain_name` is set (generic CognitiveServices won't work)
-
-**Problem: Terraform state drift**
-- Solution: Run `terraform plan` to see differences, then `terraform apply` to reconcile
-
-#### Security Considerations
-
-- **Secrets Management**: All secrets stored in Key Vault, referenced via `@Microsoft.KeyVault(...)` syntax
-- **Managed Identity**: App Service uses system-assigned identity to access Key Vault (no keys in app settings)
-- **Storage Access**: Public blob access only for `pig-images` container (24h retention), `pig-results` is private
-- **TLS Enforcement**: `min_tls_version = "TLS1_2"` and `https_traffic_only_enabled = true`
-- **Soft Delete**: Key Vault has 7-day retention for accidental deletions
-- **Subscription ID**: Hardcoded in main.tf (consider moving to variable for multi-tenant)
-
-### Updating Infrastructure
-1. Always run `terraform plan` first to review changes
-2. After applying, restart App Service to pick up new Key Vault secrets:
-   ```bash
-   az webapp restart --resource-group <rg> --name <app-name>
-   ```
+### Modifying Infrastructure
+1. Run `terraform plan` first to review changes
+2. After applying, restart App Service: `az webapp restart --resource-group <rg> --name <app-name>`
 3. Update DEPLOYMENT.md with new resource names/URLs
-4. Test locally with updated `.env.local` before deploying
 
 ### UI Changes
 - Use existing Tailwind utilities (no custom CSS unless in `app/globals.css`)

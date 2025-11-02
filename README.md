@@ -4,6 +4,8 @@
 
 A production-ready web application that analyzes hand-drawn pig drawings to provide personality insights using Azure AI Content Understanding and psychological principles.
 
+> 📚 **[View Complete Documentation Index](DOCS.md)** - All guides, deployment instructions, and development resources
+
 ## 🌟 Features
 
 - **5-Minute Drawing Timer**: Guided drawing experience with countdown timer
@@ -71,8 +73,12 @@ The app analyzes your pig drawing based on:
    Fill in your Azure credentials:
    - `AZURE_STORAGE_ACCOUNT_NAME`: Your storage account name
    - `AZURE_STORAGE_ACCOUNT_KEY`: Storage account access key
-   - `CONTENT_UNDERSTANDING_ENDPOINT`: AI Foundry endpoint URL
-   - `CONTENT_UNDERSTANDING_KEY`: AI Foundry subscription key
+   - `CONTENT_UNDERSTANDING_ENDPOINT`: AI Services endpoint URL
+   - `CONTENT_UNDERSTANDING_KEY`: AI Services subscription key
+   - `AI_FOUNDRY_HUB_NAME`: AI Foundry hub name (from Terraform output)
+   - `AI_FOUNDRY_HUB_ID`: AI Foundry hub resource ID (from Terraform output)
+   - `AI_FOUNDRY_PROJECT_NAME`: AI Foundry project name (from Terraform output)
+   - `AI_FOUNDRY_PROJECT_ID`: AI Foundry project resource ID (from Terraform output)
 
 4. **Run development server**
 
@@ -127,7 +133,9 @@ This provisions:
 - ✅ Resource Group
 - ✅ Storage Account (with containers: `pig-images`, `pig-results`)
 - ✅ Key Vault (stores secrets)
-- ✅ Azure AI Foundry (Content Understanding)
+- ✅ Azure AI Services (Content Understanding)
+- ✅ Azure AI Foundry Workspace (hub for AI projects)
+- ✅ Application Insights (monitoring)
 - ✅ App Service Plan + Web App (Linux, Node.js 20)
 
 ### Environment Setup After Terraform
@@ -168,12 +176,18 @@ The repo includes a GitHub Actions workflow (`.github/workflows/azure-deploy.yml
 2. Runs tests
 3. Deploys to Azure App Service using OIDC authentication
 
-Set up the following GitHub secrets:
+#### Setup Instructions
 
-- `AZURE_CLIENT_ID`
-- `AZURE_TENANT_ID`
-- `AZURE_SUBSCRIPTION_ID`
-- `AZURE_WEBAPP_NAME`
+1. Create a service principal with federated credentials (see DEPLOYMENT.md for detailed steps)
+2. Configure GitHub secrets:
+   - `AZURE_CLIENT_ID` - Service principal application ID
+   - `AZURE_TENANT_ID` - Your Azure tenant ID
+   - `AZURE_SUBSCRIPTION_ID` - Your Azure subscription ID
+   - `AZURE_WEBAPP_NAME` - App Service name (e.g., `<your-project-name>-app-<suffix>`)
+
+3. Push to `main` branch or manually trigger the workflow
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete setup instructions.
 
 ## 🧪 Testing
 
@@ -270,6 +284,29 @@ Analyzes a pig drawing and returns personality insights.
   ]
 }
 ```
+
+## 📚 Documentation
+
+Detailed documentation is available in the following files:
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete Azure deployment guide
+  - Resource inventory and URLs
+  - Local development setup
+  - Manual and automated deployment options
+  - AI Foundry hub and project setup
+  - Monitoring and troubleshooting
+  - Cleanup instructions
+
+- **[GITHUB-SECRETS-SETUP.md](GITHUB-SECRETS-SETUP.md)** - GitHub Actions CI/CD setup
+  - Service principal creation with OIDC
+  - Required GitHub secrets configuration
+  - Step-by-step deployment pipeline setup
+
+- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Development guidelines
+  - Project architecture and patterns
+  - Critical conventions and best practices
+  - Common pitfalls and solutions
+  - File organization and structure
 
 ## 🤝 Contributing
 

@@ -113,74 +113,88 @@ resource "azurerm_key_vault_secret" "storage_key" {
   key_vault_id = azurerm_key_vault.main.id
 }
 
-# AI Foundry Resource (Azure AI Services)
-# CRITICAL: Content Understanding requires AIServices with custom_subdomain_name
-# Generic CognitiveServices endpoint (westus.api.cognitive.microsoft.com) will NOT work
-resource "azurerm_cognitive_account" "ai_foundry" {
-  name                = "${var.project_name}-ai-${random_string.suffix.result}"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  kind                = "AIServices"
-  sku_name            = "S0"
-  custom_subdomain_name = "${var.project_name}-ai-${random_string.suffix.result}"
-  
-  tags = var.tags
-}
-
-# Store AI Foundry key in Key Vault
-resource "azurerm_key_vault_secret" "ai_foundry_key" {
+# Maintain backward compatibility - store AI Services credentials with original names
+resource "azurerm_key_vault_secret" "content_understanding_key" {
   name         = "content-understanding-key"
-  value        = azurerm_cognitive_account.ai_foundry.primary_access_key
+  value        = azurerm_ai_services.main.primary_access_key
   key_vault_id = azurerm_key_vault.main.id
 }
 
-# Store AI Foundry endpoint in Key Vault
-resource "azurerm_key_vault_secret" "ai_foundry_endpoint" {
+resource "azurerm_key_vault_secret" "content_understanding_endpoint" {
   name         = "content-understanding-endpoint"
-  value        = azurerm_cognitive_account.ai_foundry.endpoint
+  value        = azurerm_ai_services.main.endpoint
   key_vault_id = azurerm_key_vault.main.id
 }
 
-# Application Insights for AI Foundry
-resource "azurerm_application_insights" "ai_foundry" {
-  name                = "${var.project_name}-appi-${random_string.suffix.result}"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  application_type    = "web"
+# Azure AI Services (replaces azurerm_cognitive_account for AI Foundry compatibility)
+resource "azurerm_ai_services" "main" {
+  name                  = "${var.project_name}-aiservices-${random_string.suffix.result}"
+  location              = azurerm_resource_group.main.location
+  resource_group_name   = azurerm_resource_group.main.name
+  sku_name              = "S0"
+  custom_subdomain_name = "${var.project_name}-aiservices-${random_string.suffix.result}"
   
   tags = var.tags
 }
 
-# Azure Machine Learning Workspace (serves as AI Foundry Hub)
-# Note: AI Foundry Hub/Project distinction is managed in the Azure AI Studio portal
-# This workspace can be used as a hub for AI projects
-# The workspace automatically creates necessary access policies for Key Vault and Storage
-resource "azurerm_machine_learning_workspace" "ai_foundry" {
-  name                          = "${var.project_name}-aiworkspace-${random_string.suffix.result}"
-  location                      = azurerm_resource_group.main.location
-  resource_group_name           = azurerm_resource_group.main.name
-  application_insights_id       = azurerm_application_insights.ai_foundry.id
-  key_vault_id                  = azurerm_key_vault.main.id
-  storage_account_id            = azurerm_storage_account.main.id
+# Store AI Services key in Key Vault
+resource "azurerm_key_vault_secret" "ai_services_key" {
+  name         = "ai-services-key"
+  value        = azurerm_ai_services.main.primary_access_key
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# Store AI Services endpoint in Key Vault
+resource "azurerm_key_vault_secret" "ai_services_endpoint" {
+  name         = "ai-services-endpoint"
+  value        = azurerm_ai_services.main.endpoint
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# Azure AI Foundry Hub
+resource "azurerm_ai_foundry" "hub" {
+  name                = "${var.project_name}-hub-${random_string.suffix.result}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  storage_account_id  = azurerm_storage_account.main.id
+  key_vault_id        = azurerm_key_vault.main.id
   
   identity {
     type = "SystemAssigned"
   }
   
-  # Enable public network access for AI Studio
-  public_network_access_enabled = true
-  
   tags = merge(var.tags, {
-    Purpose = "AI Foundry Hub and Projects"
+    Purpose = "AI Foundry Hub"
   })
 }
 
-# Grant ML Workspace managed identity access to AI Services
-# Note: Key Vault and Storage access are automatically configured by the workspace
-resource "azurerm_role_assignment" "ai_foundry_cognitive" {
-  scope                = azurerm_cognitive_account.ai_foundry.id
+# Azure AI Foundry Project
+resource "azurerm_ai_foundry_project" "project" {
+  name               = "${var.project_name}-project-${random_string.suffix.result}"
+  location           = azurerm_ai_foundry.hub.location
+  ai_services_hub_id = azurerm_ai_foundry.hub.id
+  
+  identity {
+    type = "SystemAssigned"
+  }
+  
+  tags = merge(var.tags, {
+    Purpose = "AI Foundry Project"
+  })
+}
+
+# Grant AI Foundry Hub managed identity access to AI Services
+resource "azurerm_role_assignment" "hub_ai_services" {
+  scope                = azurerm_ai_services.main.id
   role_definition_name = "Cognitive Services User"
-  principal_id         = azurerm_machine_learning_workspace.ai_foundry.identity[0].principal_id
+  principal_id         = azurerm_ai_foundry.hub.identity[0].principal_id
+}
+
+# Grant AI Foundry Project managed identity access to AI Services
+resource "azurerm_role_assignment" "project_ai_services" {
+  scope                = azurerm_ai_services.main.id
+  role_definition_name = "Cognitive Services User"
+  principal_id         = azurerm_ai_foundry_project.project.identity[0].principal_id
 }
 
 # App Service Plan
@@ -216,8 +230,8 @@ resource "azurerm_linux_web_app" "main" {
     AZURE_STORAGE_CONTAINER_NAME = "pig-images"
     
     # Azure AI Content Understanding
-    CONTENT_UNDERSTANDING_ENDPOINT = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.ai_foundry_endpoint.id})"
-    CONTENT_UNDERSTANDING_KEY      = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.ai_foundry_key.id})"
+    CONTENT_UNDERSTANDING_ENDPOINT = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.content_understanding_endpoint.id})"
+    CONTENT_UNDERSTANDING_KEY      = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.content_understanding_key.id})"
     
     # Next.js settings
     WEBSITE_NODE_DEFAULT_VERSION = "20-lts"

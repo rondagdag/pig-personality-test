@@ -54,9 +54,9 @@ iac/*_override.tf.json
 iac/.terraformrc
 iac/terraform.rc
 
-# deployment and sensitive documentation
-DEPLOYMENT.md
-DEPLOY.md
+# deployment and sensitive documentation (uncomment if these contain real credentials)
+# DEPLOYMENT.md
+# DEPLOY.md
 CREDENTIALS.md
 SECRETS.md
 KEYS.md
@@ -127,3 +127,5 @@ pnpm-lock.yaml
 .local/
 *.local
 local-config.json
+
+audit/

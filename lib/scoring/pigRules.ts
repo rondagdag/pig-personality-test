@@ -119,7 +119,7 @@ function evaluateOrientation(detection: Detection): PersonalityTrait | null {
     if (Math.abs(offset) > bodyWidth * 0.2) {
       orientation = offset < 0 ? 'Left' : 'Right';
     }
-  } else if (ears.length >= 2) {
+  } else if (ears && ears.length >= 2) {
     // Use ear positions: if both ears visible, likely facing front or slight angle
     const ear1 = ears[0].boundingBox;
     const ear2 = ears[1].boundingBox;
