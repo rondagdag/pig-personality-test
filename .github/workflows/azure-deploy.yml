@@ -37,20 +37,27 @@ jobs:
       
       - name: Create deployment package
         run: |
-          # Create deployment directory with only necessary files
+          # Create deployment directory for standalone build
           mkdir -p deploy
           
-          # Copy built application
-          cp -r .next deploy/
-          cp -r public deploy/ 2>/dev/null || true
+          # Copy standalone server
+          cp -r .next/standalone/. deploy/
           
-          # Copy configuration and dependencies
-          cp package*.json deploy/
-          cp next.config.* deploy/ 2>/dev/null || true
+          # Copy static files
+          mkdir -p deploy/.next/static
+          cp -r .next/static/. deploy/.next/static/
           
-          # Copy application source (needed for standalone build)
-          cp -r app deploy/ 2>/dev/null || true
-          cp -r lib deploy/ 2>/dev/null || true
+          # Copy public files
+          mkdir -p deploy/public
+          cp -r public/. deploy/public/ 2>/dev/null || true
+          
+          # Create startup script
+          cat > deploy/startup.sh << 'EOF'
+          #!/bin/sh
+          PORT="${PORT:-8080}"
+          node server.js
+          EOF
+          chmod +x deploy/startup.sh
           
           # Create zip for deployment
           cd deploy && zip -r ../deployment.zip . && cd ..
