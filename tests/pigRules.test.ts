@@ -232,6 +232,303 @@ describe('Pig Rules Engine', () => {
     });
   });
 
+  describe('Orientation Analysis', () => {
+    test('should identify left-facing pig', () => {
+      const detection = createMockDetection({
+        head: { boundingBox: { x: 100, y: 150, width: 80, height: 70 }, confidence: 0.9 },
+        body: { boundingBox: { x: 150, y: 140, width: 150, height: 120 }, confidence: 0.95 },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const orientationTrait = traits.find(t => t.category === 'orientation');
+
+      expect(orientationTrait).toBeDefined();
+      expect(orientationTrait?.statement).toContain('believe in tradition');
+      expect(orientationTrait?.evidence.key).toContain('Left');
+    });
+
+    test('should identify right-facing pig', () => {
+      const detection = createMockDetection({
+        head: { boundingBox: { x: 250, y: 150, width: 80, height: 70 }, confidence: 0.9 },
+        body: { boundingBox: { x: 100, y: 140, width: 150, height: 120 }, confidence: 0.95 },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const orientationTrait = traits.find(t => t.category === 'orientation');
+
+      expect(orientationTrait?.statement).toContain('innovative and active');
+      expect(orientationTrait?.evidence.key).toContain('Right');
+    });
+
+    test('should identify front-facing pig', () => {
+      const detection = createMockDetection({
+        head: { boundingBox: { x: 150, y: 140, width: 80, height: 70 }, confidence: 0.9 },
+        body: { boundingBox: { x: 140, y: 150, width: 100, height: 100 }, confidence: 0.95 },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const orientationTrait = traits.find(t => t.category === 'orientation');
+
+      expect(orientationTrait?.statement).toContain('direct');
+      expect(orientationTrait?.evidence.key).toContain('Front');
+    });
+
+    test('should default to front-facing when head is missing', () => {
+      const detection = createMockDetection({
+        head: undefined,
+        body: { boundingBox: { x: 100, y: 150, width: 150, height: 120 }, confidence: 0.95 },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const orientationTrait = traits.find(t => t.category === 'orientation');
+
+      expect(orientationTrait?.statement).toContain('direct');
+    });
+
+    test('should use ears for orientation when head and body missing', () => {
+      const detection = createMockDetection({
+        head: undefined,
+        body: undefined,
+        ears: [
+          { boundingBox: { x: 120, y: 100, width: 20, height: 30 }, confidence: 0.8 },
+          { boundingBox: { x: 160, y: 100, width: 20, height: 30 }, confidence: 0.8 },
+        ],
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const orientationTrait = traits.find(t => t.category === 'orientation');
+
+      expect(orientationTrait).toBeDefined();
+      expect(orientationTrait?.evidence.key).toContain('Front');
+    });
+  });
+
+  describe('Tail Analysis Edge Cases', () => {
+    test('should not return trait for short tail below threshold', () => {
+      const detection = createMockDetection({
+        body: { boundingBox: { x: 100, y: 150, width: 200, height: 150 }, confidence: 0.95 },
+        tail: { boundingBox: { x: 300, y: 200, width: 40, height: 15 }, confidence: 0.75 }, // 20% - below 40% threshold
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const tailTrait = traits.find(t => t.category === 'tail');
+
+      // Tail is below threshold, should not return a trait
+      expect(tailTrait).toBeUndefined();
+    });
+
+    test('should use absolute measurement when body is missing', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 100, y: 150, width: 200, height: 150 },
+          canvas: { width: 500, height: 500 },
+        },
+        body: undefined,
+        tail: { boundingBox: { x: 300, y: 200, width: 100, height: 20 }, confidence: 0.75 }, // 20% of canvas
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const tailTrait = traits.find(t => t.category === 'tail');
+
+      // With large enough tail (>15% of canvas), should return trait
+      expect(tailTrait).toBeDefined();
+      expect(tailTrait?.statement).toContain('intelligence');
+    });
+  });
+
+  describe('Ear Analysis Edge Cases', () => {
+    test('should not return trait for small ears below threshold', () => {
+      const detection = createMockDetection({
+        head: { boundingBox: { x: 150, y: 100, width: 100, height: 80 }, confidence: 0.9 },
+        ears: [
+          { boundingBox: { x: 150, y: 95, width: 15, height: 20 }, confidence: 0.8 }, // 25% - below 30% threshold
+          { boundingBox: { x: 235, y: 95, width: 15, height: 20 }, confidence: 0.8 },
+        ],
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const earTrait = traits.find(t => t.category === 'ears');
+
+      // Ears are below threshold, should not return a trait
+      expect(earTrait).toBeUndefined();
+    });
+
+    test('should skip ear analysis when head is missing', () => {
+      const detection = createMockDetection({
+        head: undefined,
+        ears: [
+          { boundingBox: { x: 150, y: 95, width: 25, height: 40 }, confidence: 0.8 },
+        ],
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const earTrait = traits.find(t => t.category === 'ears');
+
+      expect(earTrait).toBeUndefined();
+    });
+
+    test('should handle single ear', () => {
+      const detection = createMockDetection({
+        head: { boundingBox: { x: 150, y: 100, width: 100, height: 80 }, confidence: 0.9 },
+        ears: [
+          { boundingBox: { x: 150, y: 90, width: 25, height: 40 }, confidence: 0.8 },
+        ],
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const earTrait = traits.find(t => t.category === 'ears');
+
+      expect(earTrait).toBeDefined();
+    });
+  });
+
+  describe('Comprehensive Integration Tests', () => {
+    test('should analyze complete pig drawing with all features', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 100, y: 150, width: 300, height: 200 },
+          canvas: { width: 600, height: 600 },
+        },
+        head: { boundingBox: { x: 250, y: 160, width: 90, height: 80 }, confidence: 0.92 },
+        body: { boundingBox: { x: 120, y: 180, width: 180, height: 140 }, confidence: 0.95 },
+        legs: [
+          { boundingBox: { x: 130, y: 300, width: 30, height: 70 }, confidence: 0.88 },
+          { boundingBox: { x: 180, y: 300, width: 30, height: 70 }, confidence: 0.87 },
+          { boundingBox: { x: 230, y: 300, width: 30, height: 70 }, confidence: 0.89 },
+          { boundingBox: { x: 270, y: 300, width: 30, height: 70 }, confidence: 0.86 },
+        ],
+        ears: [
+          { boundingBox: { x: 250, y: 150, width: 25, height: 45 }, confidence: 0.84 },
+          { boundingBox: { x: 315, y: 150, width: 25, height: 45 }, confidence: 0.83 },
+        ],
+        tail: { boundingBox: { x: 300, y: 220, width: 100, height: 25 }, confidence: 0.79 },
+        detailCount: 12,
+      });
+
+      const traits = analyzePigDrawing(detection);
+
+      // Should have traits from all categories
+      expect(traits.find(t => t.category === 'placement')).toBeDefined();
+      expect(traits.find(t => t.category === 'orientation')).toBeDefined();
+      expect(traits.find(t => t.category === 'details')).toBeDefined();
+      expect(traits.find(t => t.category === 'legs')).toBeDefined();
+      expect(traits.find(t => t.category === 'ears')).toBeDefined();
+      expect(traits.find(t => t.category === 'tail')).toBeDefined();
+
+      // Should have at least 6 traits
+      expect(traits.length).toBeGreaterThanOrEqual(6);
+
+      // Summary should be comprehensive
+      const summary = generateSummary(traits);
+      expect(summary.length).toBeGreaterThan(100);
+    });
+
+    test('should analyze minimalist pig drawing', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 200, y: 400, width: 150, height: 80 },
+          canvas: { width: 600, height: 600 },
+        },
+        detailCount: 2,
+        legs: [],
+        ears: [],
+        tail: undefined,
+      });
+
+      const traits = analyzePigDrawing(detection);
+
+      // Should at least have placement and detail traits
+      expect(traits.find(t => t.category === 'placement')).toBeDefined();
+      expect(traits.find(t => t.category === 'details')).toBeDefined();
+      expect(traits.find(t => t.category === 'orientation')).toBeDefined();
+
+      // Should not have optional traits
+      expect(traits.find(t => t.category === 'legs')).toBeDefined(); // Even with 0 legs
+      expect(traits.find(t => t.category === 'ears')).toBeUndefined();
+      expect(traits.find(t => t.category === 'tail')).toBeUndefined();
+    });
+  });
+
+  describe('Boundary Value Tests', () => {
+    test('should handle pig at exact top threshold', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 100, y: 165, width: 200, height: 150 }, // Exactly at 0.33
+          canvas: { width: 500, height: 500 },
+        },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const placementTrait = traits.find(t => t.category === 'placement');
+
+      expect(placementTrait).toBeDefined();
+    });
+
+    test('should handle pig at exact bottom threshold', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 100, y: 335, width: 200, height: 150 }, // Exactly at 0.67
+          canvas: { width: 500, height: 500 },
+        },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const placementTrait = traits.find(t => t.category === 'placement');
+
+      expect(placementTrait).toBeDefined();
+    });
+
+    test('should handle exactly 5 details (threshold)', () => {
+      const detection = createMockDetection({
+        detailCount: 5,
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const detailTrait = traits.find(t => t.category === 'details');
+
+      expect(detailTrait).toBeDefined();
+    });
+
+    test('should handle exactly 6 details (just above threshold)', () => {
+      const detection = createMockDetection({
+        detailCount: 6,
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const detailTrait = traits.find(t => t.category === 'details');
+
+      expect(detailTrait?.evidence.key).toContain('Many');
+    });
+
+    test('should not return trait for ears at exact size threshold', () => {
+      const detection = createMockDetection({
+        head: { boundingBox: { x: 150, y: 100, width: 100, height: 100 }, confidence: 0.9 },
+        ears: [
+          { boundingBox: { x: 150, y: 90, width: 20, height: 30 }, confidence: 0.8 }, // Exactly 0.3 (30%)
+        ],
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const earTrait = traits.find(t => t.category === 'ears');
+
+      // At threshold (not greater than), should not return trait
+      expect(earTrait).toBeUndefined();
+    });
+
+    test('should not return trait for tail at exact length threshold', () => {
+      const detection = createMockDetection({
+        body: { boundingBox: { x: 100, y: 150, width: 200, height: 150 }, confidence: 0.95 },
+        tail: { boundingBox: { x: 300, y: 200, width: 80, height: 20 }, confidence: 0.75 }, // Exactly 0.4 (40%)
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const tailTrait = traits.find(t => t.category === 'tail');
+
+      // At threshold (not greater than), should not return trait
+      expect(tailTrait).toBeUndefined();
+    });
+  });
+
   describe('Edge Cases', () => {
     test('should handle minimal detection data', () => {
       const detection: Detection = {
@@ -269,6 +566,76 @@ describe('Pig Rules Engine', () => {
       const detailTrait = traits.find(t => t.category === 'details');
 
       expect(detailTrait?.evidence.key).toContain('Many');
+    });
+
+    test('should handle zero-width bounding box', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 100, y: 200, width: 0, height: 100 },
+          canvas: { width: 500, height: 500 },
+        },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      expect(traits.length).toBeGreaterThan(0);
+    });
+
+    test('should handle square canvas', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 250, y: 250, width: 100, height: 100 }, // Center y=300, canvas height=1000, ratio=0.3
+          canvas: { width: 1000, height: 1000 },
+        },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const placementTrait = traits.find(t => t.category === 'placement');
+
+      expect(placementTrait).toBeDefined();
+      // Center at 0.3 is in top third (<0.33)
+      expect(placementTrait?.evidence.key).toContain('Top');
+    });
+
+    test('should handle negative coordinates gracefully', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: -10, y: -10, width: 100, height: 100 },
+          canvas: { width: 500, height: 500 },
+        },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      expect(traits.length).toBeGreaterThan(0);
+    });
+
+    test('should handle pig larger than canvas', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 0, y: 0, width: 1000, height: 1000 },
+          canvas: { width: 500, height: 500 },
+        },
+      });
+
+      const traits = analyzePigDrawing(detection);
+      expect(traits.length).toBeGreaterThan(0);
+    });
+
+    test('should handle more than 4 legs', () => {
+      const detection = createMockDetection({
+        legs: [
+          { boundingBox: { x: 120, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+          { boundingBox: { x: 160, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+          { boundingBox: { x: 200, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+          { boundingBox: { x: 240, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+          { boundingBox: { x: 280, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+        ],
+      });
+
+      const traits = analyzePigDrawing(detection);
+      const legTrait = traits.find(t => t.category === 'legs');
+
+      expect(legTrait).toBeDefined();
+      expect(legTrait?.evidence.key).toBe('legs=5');
     });
   });
 });
