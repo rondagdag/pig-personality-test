@@ -32,6 +32,8 @@ export interface AnalyzeImageOptions {
   imageUrl: string; // Azure Content Understanding requires a publicly accessible URL
 }
 
+export { isPigDescription };
+
 /**
  * Return a JSON body suitable for creating a custom analyzer in Azure Content Understanding.
  * This defines the contract (the fields) our app expects so `transformToDetection()` can map
@@ -230,6 +232,25 @@ async function pollForResults(requestId: string): Promise<AzureAnalyzerResponse>
   }
 
   throw new Error('Analysis timed out after maximum polling attempts');
+}
+
+/**
+ * Check if the description indicates the image contains a pig
+ */
+function isPigDescription(description: string | undefined): boolean {
+  if (!description) return false;
+  
+  const descriptionLower = description.toLowerCase();
+  
+  // Check for pig-related keywords
+  const pigKeywords = ['pig', 'porcine', 'swine', 'hog', 'piglet'];
+  const hasPigKeyword = pigKeywords.some(keyword => descriptionLower.includes(keyword));
+  
+  // Additional check: description mentions pig anatomy or drawing-like terms
+  const anatomyKeywords = ['snout', 'curly tail', 'trotters'];
+  const hasAnatomyKeyword = anatomyKeywords.some(keyword => descriptionLower.includes(keyword));
+  
+  return hasPigKeyword || hasAnatomyKeyword;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { analyzePigDrawing, generateSummary, createMockDetection } from '@/lib/scoring/pigRules';
+import { isPigDescription } from '@/lib/azure/content-understanding';
 import { Detection } from '@/lib/types';
 
 describe('Pig Rules Engine', () => {
@@ -636,6 +637,200 @@ describe('Pig Rules Engine', () => {
 
       expect(legTrait).toBeDefined();
       expect(legTrait?.evidence.key).toBe('legs=5');
+    });
+  });
+
+  describe('Pig Validation', () => {
+    test('should identify valid pig description', () => {
+      expect(isPigDescription('The drawing is a simple, cartoon-style depiction of a pig.')).toBe(true);
+    });
+
+    test('should identify pig with keyword variations', () => {
+      expect(isPigDescription('A drawing of a piglet with four legs')).toBe(true);
+      expect(isPigDescription('This is a porcine animal')).toBe(true);
+      expect(isPigDescription('A swine with a curly tail')).toBe(true);
+      expect(isPigDescription('Drawing of a hog')).toBe(true);
+    });
+
+    test('should identify pig by anatomy keywords', () => {
+      expect(isPigDescription('An animal with a large snout and four legs')).toBe(true);
+      expect(isPigDescription('Drawing with a curly tail')).toBe(true);
+      expect(isPigDescription('Animal with trotters')).toBe(true);
+    });
+
+    test('should reject non-pig animals', () => {
+      expect(isPigDescription('A drawing of a dog with four legs')).toBe(false);
+      expect(isPigDescription('A photograph of a cat sitting on a couch')).toBe(false);
+      expect(isPigDescription('A horse standing in a field')).toBe(false);
+      expect(isPigDescription('A drawing of a bird')).toBe(false);
+    });
+
+    test('should reject non-animal drawings', () => {
+      expect(isPigDescription('A drawing of a house')).toBe(false);
+      expect(isPigDescription('A photograph of a tree')).toBe(false);
+      expect(isPigDescription('Abstract art with geometric shapes')).toBe(false);
+    });
+
+    test('should handle empty or undefined input', () => {
+      expect(isPigDescription('')).toBe(false);
+      expect(isPigDescription(undefined)).toBe(false);
+    });
+
+    test('should be case insensitive', () => {
+      expect(isPigDescription('A PIG drawing')).toBe(true);
+      expect(isPigDescription('DRAWING OF A HOG')).toBe(true);
+      expect(isPigDescription('Swine with SNOUT')).toBe(true);
+    });
+  });
+
+  describe('Custom Analyzer Direct Values', () => {
+    test('should use direct verticalPlacement value when available', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 0, y: 0, width: 100, height: 100 },
+          canvas: { width: 500, height: 500 },
+        },
+      });
+      
+      // Add direct value from custom analyzer
+      (detection as any).verticalPlacement = 'Bottom';
+
+      const traits = analyzePigDrawing(detection);
+      const placementTrait = traits.find(t => t.category === 'placement');
+
+      expect(placementTrait?.evidence.key).toBe('placement=Bottom');
+      expect(placementTrait?.statement).toContain('pessimistic');
+    });
+
+    test('should use direct orientation value when available', () => {
+      const detection = createMockDetection();
+      
+      // Add direct value from custom analyzer
+      (detection as any).orientation = 'Right';
+
+      const traits = analyzePigDrawing(detection);
+      const orientationTrait = traits.find(t => t.category === 'orientation');
+
+      expect(orientationTrait?.evidence.key).toBe('orientation=Right');
+      expect(orientationTrait?.statement).toContain('innovative');
+    });
+
+    test('should use direct legCount value when available', () => {
+      const detection = createMockDetection({
+        legs: [], // Empty array
+      });
+      
+      // Add direct value from custom analyzer
+      (detection as any).legCount = 4;
+
+      const traits = analyzePigDrawing(detection);
+      const legTrait = traits.find(t => t.category === 'legs');
+
+      expect(legTrait?.evidence.key).toBe('legs=4');
+      expect(legTrait?.statement).toContain('secure');
+    });
+
+    test('should use direct earSize value when available', () => {
+      const detection = createMockDetection({
+        ears: [], // No ears detected
+      });
+      
+      // Add direct value from custom analyzer
+      (detection as any).earSize = 'Large';
+
+      const traits = analyzePigDrawing(detection);
+      const earTrait = traits.find(t => t.category === 'ears');
+
+      expect(earTrait?.evidence.key).toBe('ears=Large');
+      expect(earTrait?.statement).toContain('good listener');
+    });
+
+    test('should not return ear trait for Normal ear size', () => {
+      const detection = createMockDetection();
+      
+      // Add direct value from custom analyzer
+      (detection as any).earSize = 'Normal';
+
+      const traits = analyzePigDrawing(detection);
+      const earTrait = traits.find(t => t.category === 'ears');
+
+      expect(earTrait).toBeUndefined();
+    });
+
+    test('should use direct tailLength value when available', () => {
+      const detection = createMockDetection({
+        tail: undefined, // No tail detected
+      });
+      
+      // Add direct value from custom analyzer (above 0.4 threshold)
+      (detection as any).tailLength = 0.6;
+
+      const traits = analyzePigDrawing(detection);
+      const tailTrait = traits.find(t => t.category === 'tail');
+
+      expect(tailTrait?.evidence.key).toBe('tail=Long');
+      expect(tailTrait?.evidence.value).toBe(0.6);
+      expect(tailTrait?.statement).toContain('intelligence');
+    });
+
+    test('should not return tail trait for short tail length', () => {
+      const detection = createMockDetection();
+      
+      // Add direct value from custom analyzer (below 0.4 threshold)
+      (detection as any).tailLength = 0.3;
+
+      const traits = analyzePigDrawing(detection);
+      const tailTrait = traits.find(t => t.category === 'tail');
+
+      expect(tailTrait).toBeUndefined();
+    });
+
+    test('should handle all custom analyzer values together', () => {
+      const detection = createMockDetection({
+        detailCount: 0,
+      });
+      
+      // Add all direct values from custom analyzer
+      (detection as any).verticalPlacement = 'Top';
+      (detection as any).orientation = 'Left';
+      (detection as any).legCount = 4;
+      (detection as any).earSize = 'Large';
+      (detection as any).tailLength = 0.5;
+
+      const traits = analyzePigDrawing(detection);
+
+      expect(traits.find(t => t.category === 'placement')?.evidence.key).toBe('placement=Top');
+      expect(traits.find(t => t.category === 'orientation')?.evidence.key).toBe('orientation=Left');
+      expect(traits.find(t => t.category === 'legs')?.evidence.key).toBe('legs=4');
+      expect(traits.find(t => t.category === 'ears')?.evidence.key).toBe('ears=Large');
+      expect(traits.find(t => t.category === 'tail')?.evidence.key).toBe('tail=Long');
+      expect(traits.length).toBe(6); // All 6 traits present
+    });
+
+    test('should fallback to bounding box calculation when direct values missing', () => {
+      const detection = createMockDetection({
+        overall: {
+          boundingBox: { x: 100, y: 50, width: 200, height: 150 },
+          canvas: { width: 500, height: 500 },
+        },
+        head: { boundingBox: { x: 250, y: 150, width: 80, height: 70 }, confidence: 0.9 },
+        body: { boundingBox: { x: 100, y: 140, width: 150, height: 120 }, confidence: 0.95 },
+        legs: [
+          { boundingBox: { x: 120, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+          { boundingBox: { x: 170, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+          { boundingBox: { x: 220, y: 280, width: 30, height: 60 }, confidence: 0.85 },
+        ],
+      });
+      
+      // No custom analyzer values added
+
+      const traits = analyzePigDrawing(detection);
+
+      // Should still calculate traits from bounding boxes
+      expect(traits.find(t => t.category === 'placement')).toBeDefined();
+      expect(traits.find(t => t.category === 'orientation')).toBeDefined();
+      expect(traits.find(t => t.category === 'legs')).toBeDefined();
+      expect(traits.length).toBeGreaterThan(0);
     });
   });
 });

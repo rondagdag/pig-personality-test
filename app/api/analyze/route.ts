@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { analyzeImage } from '@/lib/azure/content-understanding';
+import { analyzeImage, isPigDescription } from '@/lib/azure/content-understanding';
 import { analyzePigDrawing, generateSummary } from '@/lib/scoring/pigRules';
 import { uploadBase64Image, ensureContainer } from '@/lib/storage/blob';
 import { saveResult, ensureResultsContainer } from '@/lib/storage/results';
@@ -63,6 +63,28 @@ export async function POST(request: NextRequest) {
     const detection = await analyzeImage({
       imageUrl,
     });
+
+    // Step 2.5: Validate that the image contains a pig
+    if (!detection.description) {
+      return NextResponse.json(
+        { 
+          error: 'Unable to analyze image',
+          message: 'Could not generate a description of the image. Please ensure the image is clear and try again.'
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isPigDescription(detection.description)) {
+      return NextResponse.json(
+        { 
+          error: 'Not a pig drawing',
+          message: 'This image does not appear to contain a pig drawing. Please upload a drawing of a pig to receive your personality analysis.',
+          description: detection.description
+        },
+        { status: 400 }
+      );
+    }
 
     // Step 3: Run pig personality rules
     const traits = analyzePigDrawing(detection);
