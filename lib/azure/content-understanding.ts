@@ -234,7 +234,7 @@ async function pollForResults(requestId: string): Promise<AzureAnalyzerResponse>
 
 /**
  * Transform Azure Content Understanding response to internal Detection model
- * Extracts pig features from detected objects and regions
+ * Extracts pig features from custom analyzer fields
  */
 function transformToDetection(response: AzureAnalyzerResponse): Detection {
   const result = response.result;
@@ -247,82 +247,28 @@ function transformToDetection(response: AzureAnalyzerResponse): Detection {
   let canvasWidth = 1000;
   let canvasHeight = 1000;
 
-  // Extract objects/regions from response
-  const objects = result.objects || [];
-  const detailCount = objects.length;
-  console.log(`🔍 Found ${objects.length} objects/regions in analysis:`, objects.map(o => o.category));
+  // Extract custom analyzer fields from contents[0].fields
+  const fields = result.contents?.[0]?.fields;
+  
+  if (!fields) {
+    console.warn('⚠️ No custom analyzer fields found in response');
+  }
 
-  // Extract image description from Azure Content Understanding
-  // Description is in contents[0].fields.Summary.valueString
-  const description = result.contents?.[0]?.fields?.Summary?.valueString;
-  // Azure doesn't provide confidence for the Summary field, but it's from the AI model
-  const descriptionConfidence = description ? 0.95 : undefined; // Default high confidence if description exists
+  // Extract image description from custom analyzer (ImageDescription field)
+  const description = fields?.ImageDescription?.valueString;
+  const descriptionConfidence = description ? 0.95 : undefined;
   if (description) {
     console.log(`📝 Image description: "${description}"`);
   }
 
-  // Categorize detected regions by pig anatomy
-  const head = objects.find(obj => 
-    obj.category.toLowerCase().includes('head') || 
-    obj.category.toLowerCase().includes('face')
-  );
+  // Extract detail count from custom analyzer (DetailCount field)
+  const detailCount = fields?.DetailCount?.valueNumber ?? 0;
+  console.log(`🔍 Detail count from analyzer: ${detailCount}`);
 
-  const body = objects.find(obj => 
-    obj.category.toLowerCase().includes('body') || 
-    obj.category.toLowerCase().includes('torso')
-  );
-
-  const legs = objects.filter(obj => 
-    obj.category.toLowerCase().includes('leg') || 
-    obj.category.toLowerCase().includes('foot')
-  );
-
-  const ears = objects.filter(obj => 
-    obj.category.toLowerCase().includes('ear')
-  );
-
-  const tail = objects.find(obj => 
-    obj.category.toLowerCase().includes('tail')
-  );
-
-  // Calculate overall bounding box (union of all detections)
-  const allBoxes = objects.map(obj => obj.boundingBox);
-  const overallBox = calculateOverallBoundingBox(allBoxes);
-
-  // Update canvas size from overall bounding box if available
-  if (overallBox && objects.length > 0) {
-    canvasWidth = Math.max(overallBox.x + overallBox.width, canvasWidth);
-    canvasHeight = Math.max(overallBox.y + overallBox.height, canvasHeight);
-  }
-
+  // Initialize detection object with default values
   const detection: Detection = {
-    head: head ? {
-      boundingBox: head.boundingBox,
-      confidence: head.confidence,
-      category: head.category,
-    } : undefined,
-    body: body ? {
-      boundingBox: body.boundingBox,
-      confidence: body.confidence,
-      category: body.category,
-    } : undefined,
-    legs: legs.map(leg => ({
-      boundingBox: leg.boundingBox,
-      confidence: leg.confidence,
-      category: leg.category,
-    })),
-    ears: ears.map(ear => ({
-      boundingBox: ear.boundingBox,
-      confidence: ear.confidence,
-      category: ear.category,
-    })),
-    tail: tail ? {
-      boundingBox: tail.boundingBox,
-      confidence: tail.confidence,
-      category: tail.category,
-    } : undefined,
     overall: {
-      boundingBox: overallBox || { x: 0, y: 0, width: canvasWidth, height: canvasHeight },
+      boundingBox: { x: 0, y: 0, width: canvasWidth, height: canvasHeight },
       canvas: {
         width: canvasWidth,
         height: canvasHeight,
@@ -334,93 +280,72 @@ function transformToDetection(response: AzureAnalyzerResponse): Detection {
   };
 
   // --- Custom analyzer fields handling ---
-  // If the analyzer included structured fields in contents[0].fields (per getCustomAnalyzerDefinition()),
-  // map those scalars into the detection object so the rules engine receives deterministic inputs.
-  const fields = result.contents?.[0]?.fields;
+  // Map structured fields from pig-feature-analyzer into the detection object
   if (fields) {
     // Vertical placement: Top / Middle / Bottom
-    const vertical = fields.VerticalPlacement?.valueString || fields.VerticalPlacement;
-    if (vertical) {
-      (detection as any).verticalPlacement = vertical;
+    const verticalPlacement = fields.VerticalPlacement?.valueString;
+    if (verticalPlacement) {
+      (detection as any).verticalPlacement = verticalPlacement;
+      console.log(`📍 Vertical placement: ${verticalPlacement}`);
     }
 
     // Orientation: Left / Right / Front
-    const orientation = fields.Orientation?.valueString || fields.Orientation;
+    const orientation = fields.Orientation?.valueString;
     if (orientation) {
       (detection as any).orientation = orientation;
-    }
-
-    // DetailCount: integer
-    const detailCountField = fields.DetailCount?.value || fields.DetailCount;
-    if (typeof detailCountField === 'number') {
-      detection.detailCount = detailCountField;
+      console.log(`🧭 Orientation: ${orientation}`);
     }
 
     // LegCount: integer
-    const legCountField = fields.LegCount?.value || fields.LegCount;
-    if (typeof legCountField === 'number') {
-      (detection as any).legCount = legCountField;
-      if (!detection.legs || detection.legs.length === 0) {
-        // create placeholder legs entries so downstream code knows count
-        (detection as any).legs = new Array(legCountField).fill(null).map(() => ({} as any));
+    const legCount = fields.LegCount?.valueNumber;
+    if (typeof legCount === 'number') {
+      (detection as any).legCount = legCount;
+      console.log(`🦵 Leg count: ${legCount}`);
+      
+      // Create placeholder legs array for rules engine compatibility
+      if (legCount > 0) {
+        detection.legs = new Array(legCount).fill(null).map(() => ({
+          boundingBox: { x: 0, y: 0, width: 0, height: 0 },
+          confidence: 0.9,
+          category: 'leg',
+        }));
+      } else {
+        detection.legs = [];
       }
     }
 
     // EarSize: Large | Normal
-    const earSize = fields.EarSize?.valueString || fields.EarSize;
+    const earSize = fields.EarSize?.valueString;
     if (earSize) {
       (detection as any).earSize = earSize;
+      console.log(`👂 Ear size: ${earSize}`);
+      
+      // Create placeholder ears array based on size
+      // Assuming 2 ears for Normal, could be adjusted based on your needs
+      detection.ears = [
+        { boundingBox: { x: 0, y: 0, width: 0, height: 0 }, confidence: 0.9, category: 'ear' },
+        { boundingBox: { x: 0, y: 0, width: 0, height: 0 }, confidence: 0.9, category: 'ear' },
+      ];
     }
 
-    // TailLength: numeric or categorical
-    const tailLen = fields.TailLength?.value || fields.TailLength;
-    if (typeof tailLen === 'number' || typeof tailLen === 'string') {
-      (detection as any).tailLength = tailLen;
-    }
-
-    // DetectedRegions: prefer structured regions from custom analyzer if present
-    const detectedRegions = fields.DetectedRegions?.value || fields.DetectedRegions;
-    if (Array.isArray(detectedRegions) && detectedRegions.length > 0) {
-      try {
-        const parsedRegions = detectedRegions.map((r: any) => ({
-          category: r.category,
-          boundingBox: r.boundingBox,
-          confidence: r.confidence,
-        }));
-
-        const headR = parsedRegions.find((o: any) => o.category?.toLowerCase().includes('head'));
-        const bodyR = parsedRegions.find((o: any) => o.category?.toLowerCase().includes('body'));
-        const legsR = parsedRegions.filter((o: any) => o.category?.toLowerCase().includes('leg'));
-        const earsR = parsedRegions.filter((o: any) => o.category?.toLowerCase().includes('ear'));
-        const tailR = parsedRegions.find((o: any) => o.category?.toLowerCase().includes('tail'));
-
-        if (headR) {
-          detection.head = { boundingBox: headR.boundingBox, confidence: headR.confidence, category: headR.category };
-        }
-        if (bodyR) {
-          detection.body = { boundingBox: bodyR.boundingBox, confidence: bodyR.confidence, category: bodyR.category };
-        }
-        if (legsR.length > 0) {
-          detection.legs = legsR.map((l: any) => ({ boundingBox: l.boundingBox, confidence: l.confidence, category: l.category }));
-        }
-        if (earsR.length > 0) {
-          detection.ears = earsR.map((e: any) => ({ boundingBox: e.boundingBox, confidence: e.confidence, category: e.category }));
-        }
-        if (tailR) {
-          detection.tail = { boundingBox: tailR.boundingBox, confidence: tailR.confidence, category: tailR.category };
-        }
-
-        const allBoxes2 = parsedRegions.map((r: any) => r.boundingBox).filter(Boolean);
-        const overall2 = calculateOverallBoundingBox(allBoxes2);
-        if (overall2) {
-          detection.overall = { boundingBox: overall2, canvas: { width: overall2.x + overall2.width, height: overall2.y + overall2.height } };
-        }
-      } catch (e) {
-        console.warn('Failed to parse DetectedRegions from custom analyzer:', e);
+    // TailLength: numeric (0 to 1)
+    const tailLength = fields.TailLength?.valueNumber;
+    if (typeof tailLength === 'number') {
+      (detection as any).tailLength = tailLength;
+      console.log(`🐷 Tail length: ${tailLength}`);
+      
+      // Create placeholder tail if tail exists (length > 0)
+      if (tailLength > 0) {
+        detection.tail = {
+          boundingBox: { x: 0, y: 0, width: 0, height: 0 },
+          confidence: 0.9,
+          category: 'tail',
+        };
       }
     }
   }
 
+  console.log('🔄 Transformed detection:', JSON.stringify(detection, null, 2));
   return detection;
 }
 
