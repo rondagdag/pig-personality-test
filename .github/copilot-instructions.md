@@ -3,7 +3,9 @@
 ## Project Overview
 Next.js 15 (App Router) application that analyzes hand-drawn pig images using **Azure AI Content Understanding** (NOT OpenAI) and maps visual features to personality traits via a **deterministic rules engine** (no ML/randomness).
 
-**Tech Stack**: Next.js 15 App Router • TypeScript • Azure AI Services • Azure Blob Storage • Terraform • Jest
+**Tech Stack**: Next.js 15 App Router • TypeScript • Azure AI Services • Azure Blob Storage • Azure AI Foundry • Terraform • Jest
+
+**Core Philosophy**: Deterministic personality analysis based on visual features - same drawing always produces same results. No randomness, no LLM interpretation.
 
 ## Critical Architecture Patterns
 
@@ -99,7 +101,15 @@ CONTENT_UNDERSTANDING_KEY=<api-key>
 AZURE_STORAGE_ACCOUNT_NAME=<name>
 AZURE_STORAGE_ACCOUNT_KEY=<key>
 AZURE_STORAGE_CONTAINER_NAME=pig-images
+
+# REQUIRED for AI Foundry (hub and project for AI development)
+AI_FOUNDRY_HUB_NAME=<hub-name>
+AI_FOUNDRY_HUB_ID=/subscriptions/.../workspaces/<hub-name>
+AI_FOUNDRY_PROJECT_NAME=<project-name>
+AI_FOUNDRY_PROJECT_ID=/subscriptions/.../workspaces/<project-name>
 ```
+
+**Note**: AI Foundry credentials are provisioned by Terraform but currently not used in runtime - reserved for future tracing/monitoring integration.
 
 ## Development Workflows
 
@@ -144,7 +154,9 @@ az keyvault secret show --vault-name <kv-name> --name storage-account-key --quer
 - OIDC auth (no secrets in code)
 - Requires secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_WEBAPP_NAME`
 - Runs `npm ci`, `npm test`, `npm run build` before deploy
-- Uses `azure/webapps-deploy@v3` for deployment
+- Creates standalone deployment package (.next/standalone + static + public)
+- Deploys via `az webapp deployment source config-zip` (600s timeout)
+- Uses `startup.sh` script to launch standalone server
 
 ## Common Pitfalls
 
@@ -155,6 +167,8 @@ az keyvault secret show --vault-name <kv-name> --name storage-account-key --quer
 5. **Camera on Mobile**: Use `facingMode: 'environment'` for rear camera in group mode
 6. **Next.js 15 App Router**: Server Components by default - add `"use client"` for hooks/state
 7. **Terraform Provider v4**: Must specify `subscription_id` in provider block (breaking change from v3)
+8. **Standalone Build**: GitHub Actions creates `.next/standalone` deployment, NOT standard `.next` - startup.sh runs server.js
+9. **Package Manager**: Always use npm (package-lock.json committed), never pnpm or yarn
 
 ## File Organization
 ```
@@ -222,8 +236,10 @@ az keyvault secret show --vault-name <kv-name> --name content-understanding-key 
 **Resources Deployed**:
 - Storage Account: pig-images (public 24h), pig-results (private)
 - AI Services: kind=AIServices with custom subdomain (NOT CognitiveServices)
+- AI Foundry Hub: Workspace for AI collaboration (with managed identity)
+- AI Foundry Project: Linked to hub with AI Services RBAC access (Cognitive Services User role)
 - Key Vault: All secrets stored here, App Service accesses via managed identity
-- App Service: Linux B1, Node.js 20 LTS
+- App Service: Linux B1, Node.js 20 LTS, standalone output mode
 
 ### Modifying Infrastructure
 1. Run `terraform plan` first to review changes

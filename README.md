@@ -44,9 +44,11 @@ The app analyzes your pig drawing based on:
 
 ### Prerequisites
 
-- Node.js 20+ and npm/pnpm
+- Node.js 20+ and npm
 - Azure subscription
 - Terraform 1.0+ (for infrastructure deployment)
+
+Note: This project is npm-only (package-lock.json is committed). Do not use pnpm or yarn.
 
 ### Local Development
 
@@ -60,8 +62,6 @@ The app analyzes your pig drawing based on:
 
    ```bash
    npm install
-   # or
-   pnpm install
    ```
 
 3. **Set up environment variables**
@@ -69,16 +69,19 @@ The app analyzes your pig drawing based on:
    ```bash
    cp .env.example .env.local
    ```
-   
-   Fill in your Azure credentials:
-   - `AZURE_STORAGE_ACCOUNT_NAME`: Your storage account name
-   - `AZURE_STORAGE_ACCOUNT_KEY`: Storage account access key
-   - `CONTENT_UNDERSTANDING_ENDPOINT`: AI Services endpoint URL
-   - `CONTENT_UNDERSTANDING_KEY`: AI Services subscription key
-   - `AI_FOUNDRY_HUB_NAME`: AI Foundry hub name (from Terraform output)
-   - `AI_FOUNDRY_HUB_ID`: AI Foundry hub resource ID (from Terraform output)
-   - `AI_FOUNDRY_PROJECT_NAME`: AI Foundry project name (from Terraform output)
-   - `AI_FOUNDRY_PROJECT_ID`: AI Foundry project resource ID (from Terraform output)
+
+   Fill in `.env.local` with these values (from Terraform outputs/Key Vault):
+   - `AZURE_STORAGE_ACCOUNT_NAME` — storage account name
+   - `AZURE_STORAGE_ACCOUNT_KEY` — storage account access key
+   - `AZURE_STORAGE_CONTAINER_NAME` — should be `pig-images`
+   - `CONTENT_UNDERSTANDING_ENDPOINT` — https://{custom-subdomain}.cognitiveservices.azure.com/
+   - `CONTENT_UNDERSTANDING_KEY` — AI Services subscription key
+   - `AI_FOUNDRY_HUB_NAME` — hub name
+   - `AI_FOUNDRY_HUB_ID` — hub resource ID
+   - `AI_FOUNDRY_PROJECT_NAME` — project name
+   - `AI_FOUNDRY_PROJECT_ID` — project resource ID
+
+   Tip: The AI Foundry values are provisioned by Terraform for future integrations and aren’t required at runtime today.
 
 4. **Run development server**
 
@@ -152,29 +155,45 @@ az keyvault secret show --vault-name <your-keyvault-name> --name storage-account
 
 ## 📦 Deployment
 
-### Option 1: Azure App Service Deployment
+### Option 1: Azure App Service (manual ZIP, standalone)
+
+This app uses Next.js standalone output. Package the standalone server and deploy via ZIP:
 
 ```bash
 # Build production
 npm run build
 
-# Create deployment package
-zip -r deploy.zip .next public package.json package-lock.json next.config.ts
+# Create deployment payload (standalone)
+rm -rf deploy && mkdir -p deploy/.next/static deploy/public
+cp -r .next/standalone/. deploy/
+cp -r .next/static/. deploy/.next/static/
+[ -d public ] && cp -r public/. deploy/public/ || true
 
-# Deploy to App Service
+# Add startup script
+cat > deploy/startup.sh << 'EOF'
+#!/bin/sh
+PORT="${PORT:-8080}"
+node server.js
+EOF
+chmod +x deploy/startup.sh
+
+# Zip and deploy
+cd deploy && zip -r ../deployment.zip . && cd ..
 az webapp deployment source config-zip \
-  --resource-group rg-draw-the-pig \
-  --name <your-app-service-name> \
-  --src deploy.zip
+   --resource-group rg-draw-the-pig \
+   --name <your-app-service-name> \
+   --src deployment.zip \
+   --timeout 600
 ```
 
 ### Option 2: GitHub Actions CI/CD
 
 The repo includes a GitHub Actions workflow (`.github/workflows/azure-deploy.yml`) that:
 
-1. Builds the Next.js app
+1. Builds the Next.js app (standalone output)
 2. Runs tests
-3. Deploys to Azure App Service using OIDC authentication
+3. Packages `.next/standalone` + static + public and adds a `startup.sh`
+4. Deploys to Azure App Service via ZIP using OIDC authentication
 
 #### Setup Instructions
 
@@ -188,6 +207,24 @@ The repo includes a GitHub Actions workflow (`.github/workflows/azure-deploy.yml
 3. Push to `main` branch or manually trigger the workflow
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for complete setup instructions.
+
+### Quick Verify
+
+- Local: http://localhost:3000 should load the app
+- Health check: `GET /api/analyze` returns `{ status: 'ok' }`
+- Image domains: ensure Azure Blob URLs are allowed (see `next.config.ts` images.remotePatterns)
+
+### Troubleshooting
+
+- Tail logs for App Service:
+   ```bash
+   az webapp log tail --resource-group <your-resource-group> --name <your-app-name>
+   ```
+- After changing app settings, restart:
+   ```bash
+   az webapp restart --resource-group <your-resource-group> --name <your-app-name>
+   ```
+- More tips in [DEPLOYMENT.md](DEPLOYMENT.md#-monitoring)
 
 ## 🧪 Testing
 
