@@ -54,12 +54,33 @@ export function analyzePigDrawing(detection: Detection): PersonalityTrait[] {
 
 /**
  * Rule 1: Evaluate vertical placement (top/middle/bottom)
+ * Uses direct value from custom analyzer when available
  */
 function evaluatePlacement(detection: Detection): PersonalityTrait | null {
+  // Use direct value from custom analyzer if available
+  const directPlacement = (detection as any).verticalPlacement as string | undefined;
+  
+  if (directPlacement) {
+    const statements: Record<string, string> = {
+      'Top': PERSONALITY_STATEMENTS.placement.top,
+      'Middle': PERSONALITY_STATEMENTS.placement.middle,
+      'Bottom': PERSONALITY_STATEMENTS.placement.bottom,
+    };
+
+    return {
+      category: 'placement',
+      statement: statements[directPlacement] || PERSONALITY_STATEMENTS.placement.middle,
+      evidence: {
+        key: `placement=${directPlacement}`,
+        value: directPlacement,
+      },
+    };
+  }
+
+  // Fallback: Calculate from bounding box
   const bbox = detection.overall.boundingBox;
   const canvas = detection.overall.canvas;
 
-  // Calculate centroid Y position
   const centroidY = bbox.y + bbox.height / 2;
   const relativeY = centroidY / canvas.height;
 
@@ -89,13 +110,33 @@ function evaluatePlacement(detection: Detection): PersonalityTrait | null {
 
 /**
  * Rule 2: Evaluate orientation (left/right/front)
- * Heuristic: Use head position relative to body, or ear positions
+ * Uses direct value from custom analyzer when available
  */
 function evaluateOrientation(detection: Detection): PersonalityTrait | null {
+  // Use direct value from custom analyzer if available
+  const directOrientation = (detection as any).orientation as string | undefined;
+  
+  if (directOrientation) {
+    const statements: Record<string, string> = {
+      'Left': PERSONALITY_STATEMENTS.orientation.left,
+      'Right': PERSONALITY_STATEMENTS.orientation.right,
+      'Front': PERSONALITY_STATEMENTS.orientation.front,
+    };
+
+    return {
+      category: 'orientation',
+      statement: statements[directOrientation] || PERSONALITY_STATEMENTS.orientation.front,
+      evidence: {
+        key: `orientation=${directOrientation}`,
+        value: directOrientation,
+      },
+    };
+  }
+
+  // Fallback: Calculate from bounding boxes
   const { head, body, ears } = detection;
 
   if (!head && !body) {
-    // Default to front if we can't determine
     return {
       category: 'orientation',
       statement: PERSONALITY_STATEMENTS.orientation.front,
@@ -106,26 +147,22 @@ function evaluateOrientation(detection: Detection): PersonalityTrait | null {
     };
   }
 
-  // Determine orientation based on head-body relationship
   let orientation: 'Left' | 'Right' | 'Front' = 'Front';
   
-  if (head && body) {
+  if (head && body && head.boundingBox && body.boundingBox) {
     const headCenterX = head.boundingBox.x + head.boundingBox.width / 2;
     const bodyCenterX = body.boundingBox.x + body.boundingBox.width / 2;
     const offset = headCenterX - bodyCenterX;
     const bodyWidth = body.boundingBox.width;
 
-    // If head is significantly offset from body center, determine direction
     if (Math.abs(offset) > bodyWidth * 0.2) {
       orientation = offset < 0 ? 'Left' : 'Right';
     }
-  } else if (ears && ears.length >= 2) {
-    // Use ear positions: if both ears visible, likely facing front or slight angle
+  } else if (ears && ears.length >= 2 && ears[0].boundingBox && ears[1].boundingBox) {
     const ear1 = ears[0].boundingBox;
     const ear2 = ears[1].boundingBox;
     const earSpacing = Math.abs(ear1.x - ear2.x);
     
-    // If ears are close together horizontally, likely facing front/back
     if (earSpacing < (ear1.width + ear2.width) * 1.5) {
       orientation = 'Front';
     }
@@ -168,9 +205,12 @@ function evaluateDetailLevel(detection: Detection): PersonalityTrait | null {
 
 /**
  * Rule 4: Evaluate leg count (<4 vs 4)
+ * Uses direct value from custom analyzer when available
  */
 function evaluateLegCount(detection: Detection): PersonalityTrait | null {
-  const legCount = detection.legs?.length || 0;
+  // Prefer direct value from custom analyzer
+  const directLegCount = (detection as any).legCount as number | undefined;
+  const legCount = directLegCount ?? detection.legs?.length ?? 0;
   const hasFourLegs = legCount === 4;
 
   return {
@@ -187,21 +227,44 @@ function evaluateLegCount(detection: Detection): PersonalityTrait | null {
 
 /**
  * Rule 5: Evaluate ear size (large/normal)
+ * Uses direct value from custom analyzer when available
  */
 function evaluateEarSize(detection: Detection): PersonalityTrait | null {
+  // Use direct value from custom analyzer if available
+  const directEarSize = (detection as any).earSize as string | undefined;
+  
+  if (directEarSize === 'Large') {
+    return {
+      category: 'ears',
+      statement: PERSONALITY_STATEMENTS.ears.large,
+      evidence: {
+        key: 'ears=Large',
+        value: 'Large',
+      },
+    };
+  }
+
+  // If Normal or no value, skip trait (only report if notably large)
+  if (directEarSize === 'Normal') {
+    return null;
+  }
+
+  // Fallback: Calculate from bounding boxes
   const { ears, head } = detection;
 
   if (!ears || ears.length === 0) {
-    return null; // Can't evaluate without ears
+    return null;
   }
 
-  if (!head) {
-    // Without head reference, use absolute ear size
-    const avgEarHeight = ears.reduce((sum, ear) => sum + ear.boundingBox.height, 0) / ears.length;
+  if (!head || !head.boundingBox) {
+    const validEars = ears.filter(e => e.boundingBox);
+    if (validEars.length === 0) return null;
+    
+    const avgEarHeight = validEars.reduce((sum, ear) => sum + ear.boundingBox.height, 0) / validEars.length;
     const canvasHeight = detection.overall.canvas.height;
     const relativeSize = avgEarHeight / canvasHeight;
 
-    if (relativeSize > 0.1) { // 10% of canvas
+    if (relativeSize > 0.1) {
       return {
         category: 'ears',
         statement: PERSONALITY_STATEMENTS.ears.large,
@@ -214,8 +277,10 @@ function evaluateEarSize(detection: Detection): PersonalityTrait | null {
     return null;
   }
 
-  // Calculate ear size relative to head
-  const avgEarHeight = ears.reduce((sum, ear) => sum + ear.boundingBox.height, 0) / ears.length;
+  const validEars = ears.filter(e => e.boundingBox);
+  if (validEars.length === 0) return null;
+
+  const avgEarHeight = validEars.reduce((sum, ear) => sum + ear.boundingBox.height, 0) / validEars.length;
   const headHeight = head.boundingBox.height;
   const earToHeadRatio = avgEarHeight / headHeight;
 
@@ -235,21 +300,40 @@ function evaluateEarSize(detection: Detection): PersonalityTrait | null {
 
 /**
  * Rule 6: Evaluate tail length (long/normal)
+ * Uses direct value from custom analyzer when available (threshold: 0.4)
  */
 function evaluateTailLength(detection: Detection): PersonalityTrait | null {
-  const { tail, body } = detection;
-
-  if (!tail) {
-    return null; // Can't evaluate without tail
+  // Use direct value from custom analyzer if available
+  const directTailLength = (detection as any).tailLength as number | undefined;
+  
+  if (typeof directTailLength === 'number') {
+    if (directTailLength > TAIL_LENGTH_RATIO) {
+      return {
+        category: 'tail',
+        statement: PERSONALITY_STATEMENTS.tail.long,
+        evidence: {
+          key: 'tail=Long',
+          value: directTailLength,
+        },
+      };
+    }
+    // Normal tail length, skip trait
+    return null;
   }
 
-  if (!body) {
-    // Without body reference, use absolute tail length
+  // Fallback: Calculate from bounding boxes
+  const { tail, body } = detection;
+
+  if (!tail || !tail.boundingBox) {
+    return null;
+  }
+
+  if (!body || !body.boundingBox) {
     const tailLength = Math.max(tail.boundingBox.width, tail.boundingBox.height);
     const canvasSize = Math.max(detection.overall.canvas.width, detection.overall.canvas.height);
     const relativeLength = tailLength / canvasSize;
 
-    if (relativeLength > 0.15) { // 15% of canvas
+    if (relativeLength > 0.15) {
       return {
         category: 'tail',
         statement: PERSONALITY_STATEMENTS.tail.long,
@@ -262,7 +346,6 @@ function evaluateTailLength(detection: Detection): PersonalityTrait | null {
     return null;
   }
 
-  // Calculate tail length relative to body
   const tailLength = Math.max(tail.boundingBox.width, tail.boundingBox.height);
   const bodyWidth = body.boundingBox.width;
   const tailToBodyRatio = tailLength / bodyWidth;

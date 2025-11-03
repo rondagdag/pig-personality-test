@@ -235,6 +235,9 @@ async function pollForResults(requestId: string): Promise<AzureAnalyzerResponse>
 /**
  * Transform Azure Content Understanding response to internal Detection model
  * Extracts pig features from custom analyzer fields
+ * 
+ * Note: Custom analyzer provides direct values (verticalPlacement, orientation, etc.)
+ * so bounding boxes are not needed. Rules engine uses direct values when available.
  */
 function transformToDetection(response: AzureAnalyzerResponse): Detection {
   const result = response.result;
@@ -243,109 +246,75 @@ function transformToDetection(response: AzureAnalyzerResponse): Detection {
     throw new Error('No result in analysis response');
   }
 
-  // Default canvas size (will be updated from actual detections)
-  let canvasWidth = 1000;
-  let canvasHeight = 1000;
-
   // Extract custom analyzer fields from contents[0].fields
   const fields = result.contents?.[0]?.fields;
   
   if (!fields) {
     console.warn('⚠️ No custom analyzer fields found in response');
+    throw new Error('Custom analyzer did not return expected fields');
   }
 
   // Extract image description from custom analyzer (ImageDescription field)
-  const description = fields?.ImageDescription?.valueString;
+  const description = fields.ImageDescription?.valueString;
   const descriptionConfidence = description ? 0.95 : undefined;
   if (description) {
     console.log(`📝 Image description: "${description}"`);
   }
 
   // Extract detail count from custom analyzer (DetailCount field)
-  const detailCount = fields?.DetailCount?.valueNumber ?? 0;
+  const detailCount = fields.DetailCount?.valueNumber ?? 0;
   console.log(`🔍 Detail count from analyzer: ${detailCount}`);
 
-  // Initialize detection object with default values
+  // Initialize detection object with minimal data (bounding boxes not used)
   const detection: Detection = {
     overall: {
-      boundingBox: { x: 0, y: 0, width: canvasWidth, height: canvasHeight },
-      canvas: {
-        width: canvasWidth,
-        height: canvasHeight,
-      },
+      boundingBox: { x: 0, y: 0, width: 1000, height: 1000 },
+      canvas: { width: 1000, height: 1000 },
     },
     detailCount,
     description,
     descriptionConfidence,
   };
 
-  // --- Custom analyzer fields handling ---
-  // Map structured fields from pig-feature-analyzer into the detection object
-  if (fields) {
-    // Vertical placement: Top / Middle / Bottom
-    const verticalPlacement = fields.VerticalPlacement?.valueString;
-    if (verticalPlacement) {
-      (detection as any).verticalPlacement = verticalPlacement;
-      console.log(`📍 Vertical placement: ${verticalPlacement}`);
-    }
+  // --- Extract custom analyzer fields ---
+  // These direct values are used by the rules engine
 
-    // Orientation: Left / Right / Front
-    const orientation = fields.Orientation?.valueString;
-    if (orientation) {
-      (detection as any).orientation = orientation;
-      console.log(`🧭 Orientation: ${orientation}`);
-    }
-
-    // LegCount: integer
-    const legCount = fields.LegCount?.valueNumber;
-    if (typeof legCount === 'number') {
-      (detection as any).legCount = legCount;
-      console.log(`🦵 Leg count: ${legCount}`);
-      
-      // Create placeholder legs array for rules engine compatibility
-      if (legCount > 0) {
-        detection.legs = new Array(legCount).fill(null).map(() => ({
-          boundingBox: { x: 0, y: 0, width: 0, height: 0 },
-          confidence: 0.9,
-          category: 'leg',
-        }));
-      } else {
-        detection.legs = [];
-      }
-    }
-
-    // EarSize: Large | Normal
-    const earSize = fields.EarSize?.valueString;
-    if (earSize) {
-      (detection as any).earSize = earSize;
-      console.log(`👂 Ear size: ${earSize}`);
-      
-      // Create placeholder ears array based on size
-      // Assuming 2 ears for Normal, could be adjusted based on your needs
-      detection.ears = [
-        { boundingBox: { x: 0, y: 0, width: 0, height: 0 }, confidence: 0.9, category: 'ear' },
-        { boundingBox: { x: 0, y: 0, width: 0, height: 0 }, confidence: 0.9, category: 'ear' },
-      ];
-    }
-
-    // TailLength: numeric (0 to 1)
-    const tailLength = fields.TailLength?.valueNumber;
-    if (typeof tailLength === 'number') {
-      (detection as any).tailLength = tailLength;
-      console.log(`🐷 Tail length: ${tailLength}`);
-      
-      // Create placeholder tail if tail exists (length > 0)
-      if (tailLength > 0) {
-        detection.tail = {
-          boundingBox: { x: 0, y: 0, width: 0, height: 0 },
-          confidence: 0.9,
-          category: 'tail',
-        };
-      }
-    }
+  // Vertical placement: Top / Middle / Bottom
+  const verticalPlacement = fields.VerticalPlacement?.valueString;
+  if (verticalPlacement) {
+    (detection as any).verticalPlacement = verticalPlacement;
+    console.log(`📍 Vertical placement: ${verticalPlacement}`);
   }
 
-  console.log('🔄 Transformed detection:', JSON.stringify(detection, null, 2));
+  // Orientation: Left / Right / Front
+  const orientation = fields.Orientation?.valueString;
+  if (orientation) {
+    (detection as any).orientation = orientation;
+    console.log(`🧭 Orientation: ${orientation}`);
+  }
+
+  // LegCount: integer
+  const legCount = fields.LegCount?.valueNumber;
+  if (typeof legCount === 'number') {
+    (detection as any).legCount = legCount;
+    console.log(`🦵 Leg count: ${legCount}`);
+  }
+
+  // EarSize: Large | Normal
+  const earSize = fields.EarSize?.valueString;
+  if (earSize) {
+    (detection as any).earSize = earSize;
+    console.log(`👂 Ear size: ${earSize}`);
+  }
+
+  // TailLength: numeric (0 to 1)
+  const tailLength = fields.TailLength?.valueNumber;
+  if (typeof tailLength === 'number') {
+    (detection as any).tailLength = tailLength;
+    console.log(`🐷 Tail length: ${tailLength}`);
+  }
+
+  console.log('✅ Transformed detection with custom analyzer fields');
   return detection;
 }
 
