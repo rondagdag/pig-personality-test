@@ -13,6 +13,14 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -169,6 +177,7 @@ resource "azurerm_ai_foundry" "hub" {
 }
 
 # Azure AI Foundry Project
+# Connected to AI Services resource for Content Understanding and AI models
 resource "azurerm_ai_foundry_project" "project" {
   name               = "${var.project_name}-project-${random_string.suffix.result}"
   location           = azurerm_ai_foundry.hub.location
@@ -181,6 +190,46 @@ resource "azurerm_ai_foundry_project" "project" {
   tags = merge(var.tags, {
     Purpose = "AI Foundry Project"
   })
+}
+
+# Generate AI Services connection YAML file from template
+resource "local_file" "ai_services_connection_yml" {
+  content = templatefile("${path.module}/aiservices-connection.yml", {
+    ai_services_endpoint    = azurerm_ai_services.main.endpoint
+    ai_services_resource_id = azurerm_ai_services.main.id
+  })
+  filename = "${path.module}/aiservices-connection-generated.yml"
+}
+
+# Create AI Services connection to AI Foundry Project using Azure CLI
+# This enables Content Understanding and AI model access within the AI Foundry Project
+resource "null_resource" "ai_services_connection" {
+  depends_on = [
+    azurerm_ai_foundry_project.project,
+    azurerm_ai_services.main,
+    local_file.ai_services_connection_yml,
+    azurerm_role_assignment.project_ai_services
+  ]
+  
+  provisioner "local-exec" {
+    command = <<-EOT
+      az ml connection show \
+        --name aiservices-connection \
+        --resource-group ${azurerm_resource_group.main.name} \
+        --workspace-name ${azurerm_ai_foundry_project.project.name} >/dev/null 2>&1 || \
+      az ml connection create \
+        --file ${local_file.ai_services_connection_yml.filename} \
+        --resource-group ${azurerm_resource_group.main.name} \
+        --workspace-name ${azurerm_ai_foundry_project.project.name}
+    EOT
+  }
+  
+  # Trigger recreation if AI Services resource changes
+  triggers = {
+    ai_services_id = azurerm_ai_services.main.id
+    project_id     = azurerm_ai_foundry_project.project.id
+    yaml_content   = local_file.ai_services_connection_yml.content
+  }
 }
 
 # Grant AI Foundry Hub managed identity access to AI Services
@@ -196,6 +245,12 @@ resource "azurerm_role_assignment" "project_ai_services" {
   role_definition_name = "Cognitive Services User"
   principal_id         = azurerm_ai_foundry_project.project.identity[0].principal_id
 }
+
+# Note: The AI Services connection to AI Foundry Project is established through:
+# 1. The role assignment above (grants the project's managed identity access)
+# 2. The project's ai_services_hub_id pointing to the hub that has access to AI Services
+# 3. App settings in the App Service that reference the AI Services endpoint and key
+# No separate connection resource is needed in Terraform for basic AI Services access.
 
 # App Service Plan
 resource "azurerm_service_plan" "main" {

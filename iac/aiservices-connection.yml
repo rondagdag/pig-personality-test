@@ -1,0 +1,9 @@
+# Azure AI Services Connection for AI Foundry Project
+# This connects the AI Services resource to the AI Foundry Project for Content Understanding
+# This file is processed by Terraform's templatefile function to inject dynamic values
+
+$schema: https://azuremlschemas.azureedge.net/latest/connection.schema.json
+name: aiservices-connection
+type: azure_ai_services
+endpoint: ${ai_services_endpoint}
+ai_services_resource_id: ${ai_services_resource_id}

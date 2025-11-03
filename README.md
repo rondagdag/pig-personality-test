@@ -4,7 +4,7 @@
 
 A production-ready web application that analyzes hand-drawn pig drawings to provide personality insights using Azure AI Content Understanding and psychological principles.
 
-> 📚 **[View Complete Documentation Index](DOCS.md)** - All guides, deployment instructions, and development resources
+> 📚 **[View Complete Documentation Index](docs/DOCS.md)** - All guides, deployment instructions, and development resources
 
 ## 🚦 Quickstart
 

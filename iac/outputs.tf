@@ -55,6 +55,11 @@ output "ai_foundry_project_id" {
   value       = azurerm_ai_foundry_project.project.id
 }
 
+output "ai_services_connection_file" {
+  description = "Path to the generated AI Services connection YAML file"
+  value       = local_file.ai_services_connection_yml.filename
+}
+
 output "app_service_name" {
   description = "Name of the App Service"
   value       = azurerm_linux_web_app.main.name

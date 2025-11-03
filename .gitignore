@@ -53,6 +53,7 @@ iac/*_override.tf
 iac/*_override.tf.json
 iac/.terraformrc
 iac/terraform.rc
+iac/*-generated.yml
 
 # deployment and sensitive documentation (uncomment if these contain real credentials)
 # DEPLOYMENT.md
