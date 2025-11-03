@@ -6,6 +6,62 @@ A production-ready web application that analyzes hand-drawn pig drawings to prov
 
 > 📚 **[View Complete Documentation Index](DOCS.md)** - All guides, deployment instructions, and development resources
 
+## 🚦 Quickstart
+
+### Local (3 steps)
+
+1. Install deps (npm-only)
+   ```bash
+   npm install
+   ```
+2. Create and fill env file
+   ```bash
+   cp .env.example .env.local
+   ```
+   Required values in `.env.local`:
+   - AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_CONTAINER_NAME=pig-images
+   - CONTENT_UNDERSTANDING_ENDPOINT (https://{custom-subdomain}.cognitiveservices.azure.com/)
+   - CONTENT_UNDERSTANDING_KEY (subscription key)
+   - AI_FOUNDRY_* (from Terraform outputs; not required at runtime today)
+3. Run the app
+   ```bash
+   npm run dev
+   ```
+   Open http://localhost:3000 and verify `GET /api/analyze` returns `{ status: 'ok' }`.
+
+### Cloud (Azure App Service, CI/CD)
+
+1. Provision infra (from `iac/`)
+   ```bash
+   cd iac
+   terraform init
+   terraform plan -out=main.tfplan
+   terraform apply main.tfplan
+   ```
+2. Retrieve secrets for local dev (Key Vault)
+   ```bash
+   az keyvault secret show --vault-name <kv-name> --name content-understanding-key --query value -o tsv
+   az keyvault secret show --vault-name <kv-name> --name storage-account-key --query value -o tsv
+   ```
+   App Service uses Key Vault references; restart after changes:
+   ```bash
+   az webapp restart --resource-group <rg> --name <app-name>
+   ```
+3. Configure GitHub Actions (OIDC)
+   - Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AZURE_WEBAPP_NAME
+   - Workflow: `.github/workflows/azure-deploy.yml` packages Next.js standalone and deploys via ZIP
+4. Deploy
+   - Push to `main` or run the workflow manually
+   - Or deploy manually using the standalone ZIP steps in “Deployment” below
+
+### Terraform + Key Vault checklist
+
+- [ ] `terraform apply` completed without errors
+- [ ] AI Services endpoint (custom subdomain) noted
+- [ ] Secrets present in Key Vault (content-understanding-key, storage-account-key)
+- [ ] App Service restarted to pick up Key Vault references
+- [ ] `.env.local` populated for local runs
+
 ## 🌟 Features
 
 - **5-Minute Drawing Timer**: Guided drawing experience with countdown timer

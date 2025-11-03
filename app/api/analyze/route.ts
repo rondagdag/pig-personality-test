@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     // Step 1: Upload image to blob storage if base64
+    // Azure Content Understanding requires a publicly accessible URL
     let imageUrl = blobUrl;
     if (imageBase64 && !blobUrl) {
       const uploadResult = await uploadBase64Image(
@@ -50,10 +51,17 @@ export async function POST(request: NextRequest) {
       imageUrl = uploadResult.url;
     }
 
+    if (!imageUrl) {
+      return NextResponse.json(
+        { error: 'Failed to generate image URL for analysis' },
+        { status: 400 }
+      );
+    }
+
     // Step 2: Analyze image with Azure Content Understanding
+    // Must use URL (API does not support base64 directly)
     const detection = await analyzeImage({
       imageUrl,
-      imageBase64: !imageUrl ? imageBase64 : undefined,
     });
 
     // Step 3: Run pig personality rules
@@ -68,6 +76,8 @@ export async function POST(request: NextRequest) {
       traits,
       summary,
       createdAt: new Date().toISOString(),
+      description: detection.description,
+      descriptionConfidence: detection.descriptionConfidence,
       metadata: {
         detectionCount: detection.detailCount,
         processingTimeMs: Date.now() - startTime,
@@ -88,11 +98,13 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Analysis error:', error);
+    console.error('Error stack:', error.stack);
     
     return NextResponse.json(
       { 
         error: 'Failed to analyze image',
         message: error.message || 'Unknown error',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
       { status: 500 }
     );

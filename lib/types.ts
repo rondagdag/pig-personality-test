@@ -6,7 +6,27 @@
 export interface AzureAnalyzerResponse {
   status: 'Running' | 'NotStarted' | 'Succeeded' | 'Failed';
   result?: {
+    analyzerId?: string;
+    apiVersion?: string;
+    createdAt?: string;
+    warnings?: any[];
     contents?: Array<{
+      markdown?: string;
+      kind?: string;
+      startPageNumber?: number;
+      endPageNumber?: number;
+      unit?: string;
+      pages?: Array<{
+        pageNumber: number;
+        spans: any[];
+      }>;
+      fields?: {
+        Summary?: {
+          type: string;
+          valueString: string;
+        };
+        [key: string]: any;
+      };
       sections?: Array<{
         elements?: Array<{
           kind: string;
@@ -68,6 +88,8 @@ export interface Detection {
     };
   };
   detailCount: number; // Total number of distinct parts detected
+  description?: string; // AI-generated image description from Content Understanding
+  descriptionConfidence?: number; // Confidence score for the description
 }
 
 export interface DetectionRegion {
@@ -95,6 +117,8 @@ export interface AnalysisResult {
   traits: PersonalityTrait[];
   summary: string;
   createdAt: string;
+  description?: string; // AI-generated image description
+  descriptionConfidence?: number;
   metadata?: {
     detectionCount: number;
     processingTimeMs: number;

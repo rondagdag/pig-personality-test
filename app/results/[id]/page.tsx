@@ -35,6 +35,28 @@ export default async function ResultsPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
+        {/* AI Description if available */}
+        {result.description && (
+          <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+            <div className="flex items-start space-x-2">
+              <span className="text-2xl">🤖</span>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                  AI Vision Analysis
+                </h3>
+                <p className="text-gray-700 dark:text-gray-300 italic">
+                  &quot;{result.description}&quot;
+                </p>
+                {result.descriptionConfidence && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Confidence: {Math.round(result.descriptionConfidence * 100)}%
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Image Preview if available */}
         {result.imageUrl && (
           <div className="mt-6">

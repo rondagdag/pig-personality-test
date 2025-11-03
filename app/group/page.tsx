@@ -112,7 +112,8 @@ export default function GroupPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to analyze image');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.message || errorData.error || 'Failed to analyze image');
       }
 
       const result = await response.json();

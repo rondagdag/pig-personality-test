@@ -28,33 +28,40 @@ if (!CONTENT_UNDERSTANDING_ENDPOINT || !CONTENT_UNDERSTANDING_KEY) {
 }
 
 export interface AnalyzeImageOptions {
-  imageUrl?: string;
-  imageBase64?: string;
+  imageUrl: string; // Azure Content Understanding requires a publicly accessible URL
 }
 
 /**
  * Analyze an image using Azure AI Content Understanding
  * Returns a Detection object with pig features extracted from the analysis
+ * 
+ * Note: Azure Content Understanding API only accepts publicly accessible URLs,
+ * not base64 data. Upload images to blob storage first before calling this function.
  */
 export async function analyzeImage(options: AnalyzeImageOptions): Promise<Detection> {
   if (!CONTENT_UNDERSTANDING_ENDPOINT || !CONTENT_UNDERSTANDING_KEY) {
     throw new Error('Azure Content Understanding is not configured. Check environment variables.');
   }
 
-  const { imageUrl, imageBase64 } = options;
+  const { imageUrl } = options;
 
-  if (!imageUrl && !imageBase64) {
-    throw new Error('Either imageUrl or imageBase64 must be provided');
+  if (!imageUrl) {
+    throw new Error('imageUrl is required for Azure Content Understanding API');
   }
 
   // Step 1: Submit analysis request
-  const requestId = await submitAnalysisRequest(imageUrl, imageBase64);
+  console.log('🔄 Submitting analysis request for:', imageUrl);
+  const requestId = await submitAnalysisRequest(imageUrl);
+  console.log('✅ Analysis request submitted. Request ID:', requestId);
 
   // Step 2: Poll for results
+  console.log('⏳ Polling for analysis results...');
   const response = await pollForResults(requestId);
+  console.log('📊 Analysis complete. Raw response:', JSON.stringify(response, null, 2));
 
   // Step 3: Transform Azure response to internal Detection model
   const detection = transformToDetection(response);
+  console.log('🔄 Transformed detection:', JSON.stringify(detection, null, 2));
 
   return detection;
 }
@@ -63,12 +70,11 @@ export async function analyzeImage(options: AnalyzeImageOptions): Promise<Detect
  * Submit image analysis request to Azure
  * Returns the request ID for polling
  */
-async function submitAnalysisRequest(imageUrl?: string, imageBase64?: string): Promise<string> {
+async function submitAnalysisRequest(imageUrl: string): Promise<string> {
   const endpoint = `${CONTENT_UNDERSTANDING_ENDPOINT}/contentunderstanding/analyzers/${ANALYZER_ID}:analyze?api-version=${API_VERSION}`;
 
-  const body = imageUrl 
-    ? { url: imageUrl }
-    : { data: imageBase64 };
+  // Azure Content Understanding API format: {"url": "https://..."}
+  const body = { url: imageUrl };
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -118,14 +124,20 @@ async function pollForResults(requestId: string): Promise<AzureAnalyzerResponse>
     const result: AzureAnalyzerResponse = await response.json();
 
     if (result.status === 'Succeeded') {
+      console.log('✅ Analysis succeeded after', attempt + 1, 'attempts');
+      console.log('📋 Result details:', JSON.stringify(result.result, null, 2));
       return result;
     }
 
     if (result.status === 'Failed') {
+      console.error('❌ Analysis failed:', result.error);
       throw new Error(`Analysis failed: ${result.error?.message || 'Unknown error'}`);
     }
 
     // Still running, wait and retry
+    if (attempt % 5 === 0) {
+      console.log(`⏳ Still polling... (attempt ${attempt + 1}/${MAX_POLLING_ATTEMPTS}, status: ${result.status})`);
+    }
     await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL_MS));
   }
 
@@ -150,6 +162,16 @@ function transformToDetection(response: AzureAnalyzerResponse): Detection {
   // Extract objects/regions from response
   const objects = result.objects || [];
   const detailCount = objects.length;
+  console.log(`🔍 Found ${objects.length} objects/regions in analysis:`, objects.map(o => o.category));
+
+  // Extract image description from Azure Content Understanding
+  // Description is in contents[0].fields.Summary.valueString
+  const description = result.contents?.[0]?.fields?.Summary?.valueString;
+  // Azure doesn't provide confidence for the Summary field, but it's from the AI model
+  const descriptionConfidence = description ? 0.95 : undefined; // Default high confidence if description exists
+  if (description) {
+    console.log(`📝 Image description: "${description}"`);
+  }
 
   // Categorize detected regions by pig anatomy
   const head = objects.find(obj => 
@@ -219,6 +241,8 @@ function transformToDetection(response: AzureAnalyzerResponse): Detection {
       },
     },
     detailCount,
+    description,
+    descriptionConfidence,
   };
 
   return detection;
