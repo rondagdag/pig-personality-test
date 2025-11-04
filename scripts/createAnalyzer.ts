@@ -55,7 +55,7 @@ async function main() {
   }
 
   console.log('✅ Azure credentials found');
-  console.log(`📍 Endpoint: ${process.env.CONTENT_UNDERSTANDING_ENDPOINT}\n`);
+  console.log('📍 Endpoint found (value hidden for security)\n');
 
   // Show analyzer definition
   const definition = getCustomAnalyzerDefinition();

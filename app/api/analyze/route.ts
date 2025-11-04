@@ -19,10 +19,32 @@ import { AnalyzeRequest, AnalyzeResponse, AnalysisResult } from '@/lib/types';
 export const runtime = 'nodejs'; // Use Node.js runtime for Azure SDK
 export const maxDuration = 60; // 60 seconds max for image analysis
 
+// Basic in-memory rate limiter (token bucket per IP). For production use a distributed rate limiter.
+const RATE_LIMIT_CAPACITY = 10; // requests per window
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const rateLimitMap = new Map<string, { tokens: number; lastRefill: number }>();
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // Rate limiting by IP
+    const ip = (request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown').split(',')[0].trim();
+    const now = Date.now();
+    let bucket = rateLimitMap.get(ip);
+    if (!bucket) {
+      bucket = { tokens: RATE_LIMIT_CAPACITY, lastRefill: now };
+      rateLimitMap.set(ip, bucket);
+    }
+    if (now - bucket.lastRefill > RATE_LIMIT_WINDOW_MS) {
+      bucket.tokens = RATE_LIMIT_CAPACITY;
+      bucket.lastRefill = now;
+    }
+    if (bucket.tokens <= 0) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+    }
+    bucket.tokens -= 1;
+
     // Parse request body
     const body: AnalyzeRequest = await request.json();
     const { imageBase64, blobUrl, participantName } = body;
@@ -32,6 +54,41 @@ export async function POST(request: NextRequest) {
         { error: 'Either imageBase64 or blobUrl must be provided' },
         { status: 400 }
       );
+    }
+
+    // Validate participantName (optional)
+    let safeParticipantName = 'drawing';
+    if (participantName) {
+      if (typeof participantName !== 'string' || participantName.length > 100) {
+        return NextResponse.json({ error: 'Invalid participantName' }, { status: 400 });
+      }
+      safeParticipantName = participantName.replace(/[^a-zA-Z0-9-_ ]/g, '').trim().substring(0, 100) || 'drawing';
+    }
+
+    // Validate imageBase64 size/format early to avoid wasted work
+    if (imageBase64 && !blobUrl) {
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      try {
+        const bytes = Buffer.from(base64Data, 'base64');
+        const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+        if (bytes.length === 0 || bytes.length > MAX_BYTES) {
+          return NextResponse.json({ error: 'Image must be less than 10MB' }, { status: 400 });
+        }
+      } catch (err) {
+        return NextResponse.json({ error: 'Invalid base64 image data' }, { status: 400 });
+      }
+    }
+
+    // Validate blobUrl to avoid SSRF - only allow Azure blob URLs
+    if (blobUrl) {
+      try {
+        const u = new URL(blobUrl);
+        if (u.protocol !== 'https:' || !u.hostname.endsWith('.blob.core.windows.net')) {
+          return NextResponse.json({ error: 'Invalid blobUrl' }, { status: 400 });
+        }
+      } catch (err) {
+        return NextResponse.json({ error: 'Invalid blobUrl' }, { status: 400 });
+      }
     }
 
     // Ensure containers exist
@@ -46,7 +103,7 @@ export async function POST(request: NextRequest) {
     if (imageBase64 && !blobUrl) {
       const uploadResult = await uploadBase64Image(
         imageBase64,
-        `${participantName || 'drawing'}-${Date.now()}.jpg`
+        `${safeParticipantName}-${Date.now()}.jpg`
       );
       imageUrl = uploadResult.url;
     }

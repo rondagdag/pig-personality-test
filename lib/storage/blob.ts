@@ -176,7 +176,41 @@ export async function uploadBase64Image(
   const match = base64Data.match(/^data:image\/(\w+);base64,/);
   const contentType = match ? `image/${match[1]}` : 'image/jpeg';
   
-  return uploadImage(base64Data, fileName, contentType);
+  // Convert and validate image buffer (magic bytes) before uploading
+  const rawBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(rawBase64, 'base64');
+  } catch (err) {
+    throw new Error('Invalid base64 image data');
+  }
+
+  if (!isValidImageBuffer(buffer)) {
+    throw new Error('Uploaded file is not a supported image format');
+  }
+
+  return uploadImage(buffer, fileName, contentType);
+}
+
+/**
+ * Basic magic-bytes validation for common image formats: JPEG, PNG, GIF, WEBP
+ */
+function isValidImageBuffer(buf: Buffer): boolean {
+  if (!buf || buf.length < 8) return false;
+
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return true;
+
+  // GIF: 'GIF87a' or 'GIF89a'
+  if (buf.slice(0, 6).toString('ascii') === 'GIF87a' || buf.slice(0, 6).toString('ascii') === 'GIF89a') return true;
+
+  // WebP: 'RIFF'....'WEBP'
+  if (buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') return true;
+
+  return false;
 }
 
 /**

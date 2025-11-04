@@ -130,3 +130,5 @@ pnpm-lock.yaml
 local-config.json
 
 audit/
+deploy/
+deployment.zip

@@ -18,8 +18,8 @@ Successfully created and connected Azure AI Services to the AI Foundry Project u
 ### 3. Connection Details
 - **Name**: `aiservices-connection`
 - **Type**: `azure_ai_services`
-- **Endpoint**: `https://pigtest-aiservices-eopr9n.cognitiveservices.azure.com/`
-- **Resource ID**: Full Azure resource path to the AI Services account
+- **Endpoint**: `https://<your-ai-services-name>.cognitiveservices.azure.com/`
+- **Resource ID**: Full Azure resource path to the AI Services account (use your own resource ID)
 
 ## How It Works
 
@@ -41,13 +41,13 @@ Check the connection status:
 ```bash
 az ml connection show \
   --name aiservices-connection \
-  --resource-group rg-draw-the-pig \
-  --workspace-name pigtest-project-eopr9n
+  --resource-group <your-resource-group> \
+  --workspace-name <your-workspace-name>
 ```
 
 Or view in Azure AI Foundry Portal:
 - Navigate to: https://ai.azure.com/
-- Select your project: `pigtest-project-eopr9n`
+- Select your project: `<your-workspace-name>`
 - View connections under project settings
 
 ## Next Steps
