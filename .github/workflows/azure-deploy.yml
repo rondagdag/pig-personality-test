@@ -96,6 +96,21 @@ jobs:
             --type zip \
             --timeout 90000
       
+      - name: Restart App Service
+        run: |
+          echo "Restarting App Service to load Key Vault references (including ADMIN_API_KEY)..."
+          az webapp restart \
+            --resource-group rg-draw-the-pig \
+            --name ${{ secrets.AZURE_WEBAPP_NAME }}
+      
+      - name: Verify App Settings
+        run: |
+          echo "Verifying ADMIN_API_KEY is configured..."
+          az webapp config appsettings list \
+            --resource-group rg-draw-the-pig \
+            --name ${{ secrets.AZURE_WEBAPP_NAME }} \
+            --query "[?name=='ADMIN_API_KEY'].{Name:name, Value:value}" -o table
+      
       - name: Azure Logout
         run: az logout
         if: always()

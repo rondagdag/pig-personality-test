@@ -44,6 +44,12 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
+# Generate secure admin API key
+resource "random_password" "admin_api_key" {
+  length  = 32
+  special = true
+}
+
 # Resource Group
 resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
@@ -118,6 +124,13 @@ resource "azurerm_key_vault" "main" {
 resource "azurerm_key_vault_secret" "storage_key" {
   name         = "storage-account-key"
   value        = azurerm_storage_account.main.primary_access_key
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# Store admin API key in Key Vault
+resource "azurerm_key_vault_secret" "admin_api_key" {
+  name         = "admin-api-key"
+  value        = random_password.admin_api_key.result
   key_vault_id = azurerm_key_vault.main.id
 }
 
@@ -287,6 +300,9 @@ resource "azurerm_linux_web_app" "main" {
     # Azure AI Content Understanding
     CONTENT_UNDERSTANDING_ENDPOINT = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.content_understanding_endpoint.id})"
     CONTENT_UNDERSTANDING_KEY      = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.content_understanding_key.id})"
+    
+    # Admin API Key
+    ADMIN_API_KEY = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.admin_api_key.id})"
     
     # Next.js settings
     WEBSITE_NODE_DEFAULT_VERSION = "20-lts"

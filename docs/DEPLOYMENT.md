@@ -33,6 +33,7 @@ All sensitive credentials are securely stored in Azure Key Vault:
 - `content-understanding-key` - AI Service API key
 - `content-understanding-endpoint` - AI Service endpoint URL
 - `storage-account-key` - Storage account access key
+- `admin-api-key` - Admin API key for admin endpoints (auto-generated, 32 characters)
 
 ### Retrieve Secrets from Key Vault
 
@@ -44,6 +45,14 @@ az keyvault secret show --vault-name <your-keyvault-name> \
 # Get Storage account key
 az keyvault secret show --vault-name <your-keyvault-name> \
   --name storage-account-key --query value -o tsv
+
+# Get Admin API key
+az keyvault secret show --vault-name <your-keyvault-name> \
+  --name admin-api-key --query value -o tsv
+
+# Or get admin API key from Terraform output
+cd iac
+terraform output -raw admin_api_key
 ```
 
 ## 🚀 Local Development Setup
@@ -56,6 +65,7 @@ AZURE_STORAGE_ACCOUNT_KEY=<from-key-vault>
 AZURE_STORAGE_CONTAINER_NAME=pig-images
 CONTENT_UNDERSTANDING_ENDPOINT=https://<your-ai-services-name>.cognitiveservices.azure.com/
 CONTENT_UNDERSTANDING_KEY=<from-key-vault>
+ADMIN_API_KEY=<from-key-vault-or-terraform-output>
 AI_FOUNDRY_HUB_NAME=<your-hub-name>
 AI_FOUNDRY_HUB_ID=<from-terraform-output>
 AI_FOUNDRY_PROJECT_NAME=<your-project-name>

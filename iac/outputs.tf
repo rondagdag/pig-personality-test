@@ -75,6 +75,12 @@ output "app_service_url" {
   value       = "https://${azurerm_linux_web_app.main.default_hostname}"
 }
 
+output "admin_api_key" {
+  description = "Generated admin API key for accessing admin endpoints"
+  value       = random_password.admin_api_key.result
+  sensitive   = true
+}
+
 output "deployment_instructions" {
   description = "Instructions for deploying the application"
   value       = <<-EOT
@@ -85,6 +91,7 @@ output "deployment_instructions" {
        AZURE_STORAGE_ACCOUNT_KEY="<from Key Vault or sensitive output>"
        CONTENT_UNDERSTANDING_ENDPOINT="${azurerm_ai_services.main.endpoint}"
        CONTENT_UNDERSTANDING_KEY="<from Key Vault or sensitive output>"
+       ADMIN_API_KEY="<from Key Vault or sensitive output>"
     
     2. Build and deploy your Next.js app:
        npm run build
@@ -99,6 +106,10 @@ output "deployment_instructions" {
     
     5. View secrets in Key Vault:
        az keyvault secret show --vault-name ${azurerm_key_vault.main.name} --name content-understanding-key
+       az keyvault secret show --vault-name ${azurerm_key_vault.main.name} --name admin-api-key
+       
+       Or get the admin API key from Terraform output:
+       terraform output -raw admin_api_key
     
     6. Access AI Foundry resources:
        Hub: ${azurerm_ai_foundry.hub.name}
