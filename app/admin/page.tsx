@@ -12,8 +12,25 @@ export default function AdminPage() {
   useEffect(() => {
     async function loadResults() {
       try {
-        const response = await fetch('/api/admin/results');
-        if (!response.ok) throw new Error('Failed to fetch results');
+        // Prompt for admin API key
+        const apiKey = prompt('Enter Admin API Key:');
+        if (!apiKey) {
+          setError('Admin API key is required');
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch('/api/admin/results', {
+          headers: {
+            'x-admin-api-key': apiKey,
+          },
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch results');
+        }
+        
         const data = await response.json();
         setResults(data.results || []);
       } catch (err: any) {
