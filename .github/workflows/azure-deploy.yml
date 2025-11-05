@@ -60,6 +60,11 @@ jobs:
           chmod +x deploy/startup.sh
           
           # Create zip for deployment
+          # Remove any package.json or lockfiles from the deployment folder so
+          # Azure Kudu doesn't treat the zip as a Node project and attempt to
+          # run `npm install`/`npm run build` during deployment.
+          rm -f deploy/package.json deploy/package-lock.json yarn.lock
+
           cd deploy && zip -r ../deployment.zip . && cd ..
       
       - name: Azure Login (OIDC)

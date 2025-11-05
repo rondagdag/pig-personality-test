@@ -20,7 +20,7 @@ export const runtime = 'nodejs'; // Use Node.js runtime for Azure SDK
 export const maxDuration = 60; // 60 seconds max for image analysis
 
 // Basic in-memory rate limiter (token bucket per IP). For production use a distributed rate limiter.
-const RATE_LIMIT_CAPACITY = 10; // requests per window
+const RATE_LIMIT_CAPACITY = 50; // requests per window
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const rateLimitMap = new Map<string, { tokens: number; lastRefill: number }>();
 
