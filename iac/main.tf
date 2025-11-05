@@ -290,7 +290,10 @@ resource "azurerm_linux_web_app" "main" {
     
     # Next.js settings
     WEBSITE_NODE_DEFAULT_VERSION = "20-lts"
-    SCM_DO_BUILD_DURING_DEPLOYMENT = "true"
+    SCM_DO_BUILD_DURING_DEPLOYMENT = "false"
+    
+    # Startup command for standalone build
+    WEBSITE_RUN_FROM_PACKAGE = "1"
   }
   
   identity {
