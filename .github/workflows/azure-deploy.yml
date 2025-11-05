@@ -89,11 +89,12 @@ jobs:
       
       - name: Deploy to Azure App Service
         run: |
-          az webapp deployment source config-zip \
+          az webapp deploy \
             --resource-group rg-draw-the-pig \
             --name ${{ secrets.AZURE_WEBAPP_NAME }} \
-            --src deployment.zip \
-            --timeout 900
+            --src-path deployment.zip \
+            --type zip \
+            --timeout 90000
       
       - name: Azure Logout
         run: az logout
