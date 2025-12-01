@@ -101,17 +101,25 @@ output "deployment_instructions" {
        
        Or use GitHub Actions CI/CD (see .github/workflows/azure-deploy.yml)
     
-    4. Access your application:
+    4. IMPORTANT - First deployment only:
+       After initial infrastructure deployment, restart the App Service to ensure
+       Key Vault references are properly resolved:
+       
+       az webapp restart --resource-group ${azurerm_resource_group.main.name} --name ${azurerm_linux_web_app.main.name}
+       
+       (GitHub Actions workflow includes this step automatically)
+    
+    5. Access your application:
        ${azurerm_linux_web_app.main.default_hostname}
     
-    5. View secrets in Key Vault:
+    6. View secrets in Key Vault:
        az keyvault secret show --vault-name ${azurerm_key_vault.main.name} --name content-understanding-key
        az keyvault secret show --vault-name ${azurerm_key_vault.main.name} --name admin-api-key
        
        Or get the admin API key from Terraform output:
        terraform output -raw admin_api_key
     
-    6. Access AI Foundry resources:
+    7. Access AI Foundry resources:
        Hub: ${azurerm_ai_foundry.hub.name}
        Project: ${azurerm_ai_foundry_project.project.name}
        AI Studio Portal: https://ai.azure.com/

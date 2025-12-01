@@ -202,9 +202,27 @@ https://portal.azure.com/#resource/subscriptions/<your-subscription-id>/resource
 
 ## 🔄 Update App Service Configuration
 
-After Terraform updates, restart the App Service to load new Key Vault references:
+### Key Vault References
+
+The App Service uses Key Vault references in app settings to securely access secrets without exposing them. The managed identity of the App Service has been granted `Get` and `List` permissions on Key Vault secrets.
+
+**Important:** After initial infrastructure deployment or if Key Vault references are not resolving:
 
 ```bash
+# Verify Key Vault access policy exists
+az keyvault show \
+  --name <your-keyvault-name> \
+  --resource-group <your-resource-group> \
+  --query "properties.accessPolicies[?objectId=='<app-service-principal-id>']" -o json
+
+# If missing, add access policy
+az keyvault set-policy \
+  --name <your-keyvault-name> \
+  --resource-group <your-resource-group> \
+  --object-id <app-service-principal-id> \
+  --secret-permissions get list
+
+# Restart the App Service to load Key Vault references
 az webapp restart \
   --resource-group <your-resource-group> \
   --name <your-app-name>
@@ -213,13 +231,16 @@ az webapp restart \
 Verify app settings are loading correctly:
 
 ```bash
+# Check if Key Vault references are resolved (should show actual endpoint, not @Microsoft.KeyVault reference)
 az webapp config appsettings list \
   --resource-group <your-resource-group> \
   --name <your-app-name> \
-  --query "[?name=='CONTENT_UNDERSTANDING_ENDPOINT'].value" -o tsv
+  --query "[?name=='ADMIN_API_KEY'].{Name:name, Value:value}" -o table
 ```
 
-Expected output: `https://<your-ai-services-name>.cognitiveservices.azure.com/`
+Expected output should show the Key Vault reference: `@Microsoft.KeyVault(SecretUri=https://...)`
+
+**Note:** The GitHub Actions workflow automatically includes a restart step after deployment to ensure Key Vault references are properly resolved.
 
 ## 🧹 Cleanup
 

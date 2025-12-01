@@ -317,9 +317,18 @@ resource "azurerm_linux_web_app" "main" {
   }
   
   tags = var.tags
+  
+  # Note: Key Vault references in app_settings require the access policy below to be created first.
+  # There's a circular dependency: the app must exist to get its identity, which is needed for the
+  # access policy, but the access policy must exist for Key Vault references to work.
+  # 
+  # Workaround: On first deployment, the Key Vault references may not resolve immediately.
+  # Either manually restart the app after initial deployment, or the GitHub Actions workflow
+  # includes a restart step to ensure Key Vault references are resolved.
 }
 
 # Grant App Service access to Key Vault
+# This allows the App Service to read secrets referenced in app_settings above
 resource "azurerm_key_vault_access_policy" "app_service" {
   key_vault_id = azurerm_key_vault.main.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
