@@ -1,4 +1,4 @@
-# Insights from Unstructured Data with Azure AI Content Understanding
+# Insights from Unstructured Data with Azure Content Understanding
 
 **"I know Kung Fu."**
 
@@ -10,13 +10,13 @@ Right now, your company is sitting on a mountain of "unstructured" data: call re
 
 But what if you could?
 
-This article explores **Azure AI Content Understanding**, a new service that acts like that Matrix upload for your apps. We’ll look at how it turns the chaos of raw files into the order of structured data, using a fun, real-world example: **The Pig Personality Test**.
+This article explores **Azure Content Understanding**, a new service that acts like that Matrix upload for your apps. We’ll look at how it turns the chaos of raw files into the order of structured data, using a fun, real-world example: **The Pig Personality Test**.
 
 ## The Concept: The Data Detective
 
 Think of traditional programming as a librarian. It’s great at organizing books (structured data) that are already labeled. But if you hand it a messy pile of handwritten notes or a VHS tape, it’s lost.
 
-Azure AI Content Understanding is your **Data Detective**. You don’t tell it *how* to read the data; you tell it *what* to look for. You give it a "schema"—a list of clues—and it scours the file to find them.
+Azure Content Understanding is your **Data Detective**. You don’t tell it *how* to read the data; you tell it *what* to look for. You give it a "schema"—a list of clues—and it scours the file to find them.
 
 - **You say**: "Find the date, the total amount, and the vendor."
 - **It says**: `{ "date": "2023-10-12", "amount": 450.00, "vendor": "Contoso" }`
@@ -31,7 +31,7 @@ Let’s visualize the flow. We are sending a raw image (a drawing of a pig) to A
 sequenceDiagram
     participant User
     participant App as Next.js App
-    participant Azure as Azure AI Content Understanding
+    participant Azure as Azure Content Understanding
     participant Logic as Business Rules Engine
 
     User->>App: Uploads Drawing (pig.png)
@@ -58,7 +58,7 @@ graph TD
     FE -->|Triggers| API[API Route /api/analyze]
     
     subgraph "Processing Core"
-        API -->|1. Request Analysis| AI[Azure AI Content Understanding]
+        API -->|1. Request Analysis| AI[Azure Content Understanding]
         AI -->|2. Return Structured Data| API
         API -->|3. Apply Rules| Rules[pigRules.ts]
     end
@@ -168,7 +168,7 @@ function evaluateLegCount(detection: Detection) {
 
 ### Consistency is King
 If you asked a standard LLM to "describe this pig," it might say "It's a cute piglet" one time and "A sketch of a farm animal" the next. That's nightmare for code integration.
-Azure AI Content Understanding returns structured, schema-compliant JSON. `LegCount` is always a number. `EarSize` is always an enum value we defined. It turns "creative" AI into a "reliable" API component.
+Azure Content Understanding returns structured, schema-compliant JSON. `LegCount` is always a number. `EarSize` is always an enum value we defined. It turns "creative" AI into a "reliable" API component.
 
 ### Broad Applications
 We used pigs, but this pattern applies everywhere:
@@ -185,7 +185,7 @@ We used pigs, but this pattern applies everywhere:
 
 ## Conclusion
 
-We’ve moved from the movie magic of *The Matrix* to the practical magic of modern engineering. Azure AI Content Understanding doesn’t just "read" your files; it *understands* them in a way your code can actually use.
+We’ve moved from the movie magic of *The Matrix* to the practical magic of modern engineering. Azure Content Understanding doesn’t just "read" your files; it *understands* them in a way your code can actually use.
 
 By building a clear boundary between **AI Extraction** (finding the data) and **Business Interpretation** (using the data), you build systems that are powerful, reliable, and capable of turning your unstructured chaos into structured insights.
 
