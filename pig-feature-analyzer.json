@@ -1,0 +1,34 @@
+{
+	"fieldSchema": {
+		"fields": {
+			"ImageDescription": {
+				"type": "string",
+				"description": "Detailed description of the pig drawing including visual characteristics, style, and notable features"
+			},
+			"VerticalPlacement": {
+				"type": "string",
+				"description": "Vertical placement of the pig drawing: Top, Middle, or Bottom"
+			},
+			"Orientation": {
+				"type": "string",
+				"description": "Orientation of the pig: Left, Right, or Front"
+			},
+			"DetailCount": {
+				"type": "number",
+				"description": "Number of small detail objects detected in the drawing"
+			},
+			"LegCount": {
+				"type": "number",
+				"description": "Number of legs visible in the pig drawing"
+			},
+			"EarSize": {
+				"type": "string",
+				"description": "Size of the pig ears: Large or Normal"
+			},
+			"TailLength": {
+				"type": "number",
+				"description": "Relative tail length from 0 to 1, where 0 is no tail and 1 is very long tail"
+			}
+		}
+	}
+}
